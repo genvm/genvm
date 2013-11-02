@@ -621,7 +621,7 @@ while getopts ":a:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:" opt ; do
 		S)
 			CMD_SERVER=${OPTARG} ;;
 		t)
-			CMD_THIRD=${OPTARG} ;;
+			CMD_THIRD=${OPTARG%/} ;;
 		T)
 			_THIRD_ONLY=true ;;
 		n)
