@@ -269,16 +269,16 @@ secure_tmout () {
 
 create_vm_hd () {
 	echo "create vm hard drive ${HD_IMG} (format ${_FORMAT})" ;
-	qemu-img create -f ${_FORMAT} ${HD_IMG} ${_SIZE} || \
+	qemu-img create -f ${_FORMAT} "${HD_IMG}" ${_SIZE} || \
 		die "ERR > making ${HD_IMG} failed. Execution failed" ;
 	echo "hard drive created" ;
 	secure_tmout ;
 }
 
 hd2nbd () {
-	HD_FULL_PATH=$(dirname $(readlink -f ${HD_IMG}))/$(basename ${HD_IMG})
+	HD_FULL_PATH=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}") ;
 	echo "associate vm hd (${HD_FULL_PATH}) to nbd (${_NBD})" ;
-	qemu-nbd -c ${_NBD} ${HD_FULL_PATH} || \
+	qemu-nbd -c ${_NBD} "${HD_FULL_PATH}" || \
 		die "ERR > association ${_NBD} to ${HD_IMG} failed. Execution failed" ;
 	STEPS[${#STEPS[@]}]="free_nbd" ;
 	echo "association ok" ;
@@ -644,7 +644,7 @@ case $# in
 	0)
 		usage 0 ;;
 	1)
-		HD_IMG=${1} ;;
+		HD_IMG="${1}" ;;
 	*)
 		echo -e "> Bad number of arguments\n\t${0} <hard drive image>\n" ;
 		usage ;;
