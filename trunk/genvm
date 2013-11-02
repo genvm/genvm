@@ -381,7 +381,7 @@ free_loop () {
 }
 
 create_tempdir () {
-	_MOUNT_POINT=$(mktemp -p ${_TMPDIR} -d) ;
+	_MOUNT_POINT="$(mktemp -p "${_TMPDIR}" -d)" ;
 	[ -z "${_MOUNT_POINT}" ] && {
 		die "ERR > Mount point not create. Exit" ;
 	}
@@ -390,7 +390,7 @@ create_tempdir () {
 
 mount_partitions () {
 	echo "mounting filesystems" ;
-	mount ${_LOOP} ${_MOUNT_POINT} || {
+	mount ${_LOOP} "${_MOUNT_POINT}" || {
 		die "ERR > Impossible to mount ${_LOOP} in ${_MOUNT_POINT}. Exit." ;
 	}
 	STEPS[${#STEPS[@]}]="umount_dev" ;
@@ -407,14 +407,14 @@ umount_dev () {
 
 install_sys () {
 	echo "debootstrap --arch=${_ARCH} --include=grub2,${_KERNEL}${CMD_ADDPKG} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER}" ;
-	debootstrap --arch=${_ARCH} --include=grub2,${_KERNEL}${CMD_ADDPKG} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER} || {
+	debootstrap --arch=${_ARCH} --include=grub2,${_KERNEL}${CMD_ADDPKG} --variant=minbase ${_VERSION} "${_MOUNT_POINT}" ${_SERVER} || {
 		die "ERR > installation failed. Exit." ;
 	}
 }
 
 mount_fs_dev () {
 	echo "mounting dev" ;
-	mount -o bind /dev/ ${_MOUNT_POINT}/dev/ || {
+	mount -o bind /dev/ "${_MOUNT_POINT}"/dev/ || {
 		die "ERR > failed to mount /dev in chroot" ;
 	}
 	STEPS[${#STEPS[@]}]="umount_fs_dev" ;
@@ -422,7 +422,7 @@ mount_fs_dev () {
 }
 
 umount_fs_dev () {
-	umount -l ${_MOUNT_POINT}/dev/ || {
+	umount -l "${_MOUNT_POINT}"/dev/ || {
 		unset steps[${#steps[@]}-1] ;
 		kill "err > failed to umount /dev in chroot" ;
 	}
@@ -431,7 +431,7 @@ umount_fs_dev () {
 
 mount_fs_proc () {
 	echo "mounting proc" ;
-	mount -t proc proc ${_MOUNT_POINT}/proc/ || {
+	mount -t proc proc "${_MOUNT_POINT}"/proc/ || {
 		die "ERR > failed to mount /proc in chroot" ;
 	}
 	STEPS[${#STEPS[@]}]="umount_fs_proc" ;
@@ -439,7 +439,7 @@ mount_fs_proc () {
 }
 
 umount_fs_proc () {
-	umount -l ${_MOUNT_POINT}/proc/ || {
+	umount -l "${_MOUNT_POINT}"/proc/ || {
 		unset steps[${#steps[@]}-1] ;
 		kill "err > failed to umount /proc in chroot" ;
 	}
@@ -447,7 +447,7 @@ umount_fs_proc () {
 }
 
 mapping_grub () {
-	cat > ${_MOUNT_POINT}/boot/grub/device.map <<EOF
+	cat > "${_MOUNT_POINT}"/boot/grub/device.map <<EOF
 (hd0) ${_NBD}
 (hd0,1) ${_LOOP}
 EOF
@@ -455,14 +455,14 @@ EOF
 
 install_grub () {
 	echo "chroot ${_MOUNT_POINT} /usr/sbin/grub-install --no-floppy --grub-mkdevicemap=/boot/grub/device.map --root-directory=/ ${_NBD}" ;
-	chroot ${_MOUNT_POINT} <<__EOF__
+	chroot "${_MOUNT_POINT}" <<__EOF__
 source /etc/profile
 /usr/sbin/grub-install --no-floppy --grub-mkdevicemap=/boot/grub/device.map --root-directory=/ ${_NBD}
 __EOF__
 	[ $? -gt 0 ] && {
 		die "ERR > Installation of grub failed. Exit." ;
 	}
-	chroot ${_MOUNT_POINT} <<__EOF__
+	chroot "${_MOUNT_POINT}" <<__EOF__
 source /etc/profile
 grub-mkconfig | grep -v ^[[:blank:]]loopback.* | grep -v "^[[:blank:]]set\ root=.*" > /boot/grub/grub.cfg
 __EOF__
@@ -478,22 +478,22 @@ set_passwd_to () {
 	}
 	USER_TARGET=${1} ;
 	[ -z "${2}" ] && {
-		chroot ${_MOUNT_POINT} /usr/bin/passwd ${1} ;
+		chroot "${_MOUNT_POINT}" /usr/bin/passwd ${1} ;
 		return 0 ;
 	}
 	PASSWD=${2} ;
-	chroot ${_MOUNT_POINT} /usr/bin/passwd ${1} <<EOF
+	chroot "${_MOUNT_POINT}" /usr/bin/passwd ${1} <<EOF
 ${PASSWD}
 ${PASSWD}
 EOF
 }
 
 clean_install () {
-	chroot ${_MOUNT_POINT} apt-get clean
+	chroot "${_MOUNT_POINT}" apt-get clean
 }
 
 set_machine_name () {
-	echo ${_NAME} > ${_MOUNT_POINT}/etc/hostname ;
+	echo ${_NAME} > "${_MOUNT_POINT}"/etc/hostname ;
 }
 
 run_ch () {
@@ -509,7 +509,7 @@ excute_third_part () {
 	__current_location=${PWD} ;
 
 	[ ! -z "${CMD_THIRD}" ] && {
-		MOUNT_POINT=${_MOUNT_POINT} ;
+		MOUNT_POINT="${_MOUNT_POINT}" ;
 		CH="chroot ${MOUNT_POINT}" ;
 
 		[ -d "${CMD_THIRD}" ] && {
@@ -608,7 +608,7 @@ while getopts ":a:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:" opt ; do
 			CMD_LISTPKG=${OPTARG} ;;
 		o)
 			[ -d "${OPTARG}" -a -w "${OPTARG}" ] && {
-				_TMPDIR=${OPTARG} ;
+				_TMPDIR="${OPTARG}" ;
 			} || {
 				echo "WARN > ${OPTARG} not a directory or not writable. Option ignored" ;
 			} ;;
