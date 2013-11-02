@@ -40,7 +40,7 @@ ARCH="amd64" ;
 KERNEL="linux-image-" ;
 VERSION="wheezy" ;
 SERVER="http://ftp.debian.org/debian" ;
-_TMPDIR="./" ;
+_TMPDIR="/tmp" ;
 
 declare -a STEPS ;
 
@@ -62,7 +62,7 @@ Options
 	-k	: specify kernel version (default : ${KERNEL}${ARCH})
 	-l	: file containing list of additionnal packages (one per line)
 	-n	: virtual machine name (default : $(hostname -s))
-	-o	: change default tmp dir location (default "${_TMPDIR}")
+	-o	: change default tmp dir location (path with no space ; default "${_TMPDIR}")
 	-p	: root password (default : ask to user)
 	-P	: definition of partitions (not yet available)
 	-s	: image size
@@ -607,8 +607,12 @@ while getopts ":a:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:" opt ; do
 		l)
 			CMD_LISTPKG=${OPTARG} ;;
 		o)
+			echo "${OPTARG}" | grep [[:blank:]] > /dev/null && {
+				echo -e "> No space authorized in name of alternative temp dir (option \"-o\").\n" ;
+				usage ;
+			}
 			[ -d "${OPTARG}" -a -w "${OPTARG}" ] && {
-				_TMPDIR="${OPTARG}" ;
+				_TMPDIR="${OPTARG%/}" ;
 			} || {
 				echo "WARN > ${OPTARG} not a directory or not writable. Option ignored" ;
 			} ;;
