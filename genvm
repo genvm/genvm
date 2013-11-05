@@ -70,7 +70,7 @@ Options
 	-t	: script to run after installation
 	-T	: run third party only
 	-v	: verbose mode
-	-V	: debian version : squeeze, wheezy, ... (default : ${VERSION})
+	-V	: debian version : jessie, wheezy, ... (default : ${VERSION})
 
 There is 2 posibilities to run third party scripts :
  - create a single file containing script to run ;
