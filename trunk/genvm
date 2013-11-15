@@ -35,12 +35,14 @@ _NBD="" ;
 _LOOP="" ;
 _THIRD_ONLY=false ;
 _INTERACTIVE_SEQUENCE=false ;
+_TMPDIR="/tmp" ;
 SECURE_TMOUT=1 ;
 ARCH="amd64" ;
 KERNEL="linux-image-" ;
 VERSION="wheezy" ;
 SERVER="http://ftp.debian.org/debian" ;
-_TMPDIR="/tmp" ;
+SIZE="5G" ;
+FORMAT="raw" ;
 
 declare -a STEPS ;
 
@@ -56,7 +58,7 @@ Options
 	-A	: additionals package to install in vm
 	-c	: specify a config file (first in ${_CONFIG_FILE})
 	-D	: debug mode
-	-f	: format of image : raw, qcow2, qcow, vmdk (default : raw)
+	-f	: format of image : raw, qcow2, qcow, vmdk (default : ${FORMAT})
 	-h	: this message
 	-i	: run interactive shell before exiting
 	-k	: specify kernel version (default : ${KERNEL}${ARCH})
@@ -65,7 +67,7 @@ Options
 	-o	: change default tmp dir location (path with no space ; default "${_TMPDIR}")
 	-p	: root password (default : ask to user)
 	-P	: definition of partitions (not yet available)
-	-s	: image size
+	-s	: image size (default : ${SIZE})
 	-S	: server to download debian (default : ${SERVER})
 	-t	: script to run after installation
 	-T	: run third party only
@@ -117,7 +119,7 @@ Kill () {
 disable_output () {
 	exec 2>&1 ;
 	exec 3>&1 ;
-	exec >/dev/null ;
+	exec >/dev/null 2>&1 ;
 }
 
 enable_output () {
@@ -215,9 +217,9 @@ init_env () {
 	done
 	: ${_NAME:=$(hostname -s)} ;
 	echo "virtual machine name : ${_NAME}" ;
-	: ${_FORMAT:=${CMD_FORMAT:=${FORMAT:="raw"}}} ;
+	: ${_FORMAT:=${CMD_FORMAT:=${FORMAT}}} ;
 	echo "type of image : ${_FORMAT}" ;
-	: ${_SIZE:=${SIZE:="5G"}} ;
+	: ${_SIZE:=${SIZE}} ;
 	echo "size of vm : ${_SIZE}" ;
 	: ${_ARCH:=${CMD_ARCH:=${ARCH}}} ;
 	echo "architecture : ${_ARCH}" ;
@@ -478,7 +480,10 @@ set_passwd_to () {
 	}
 	USER_TARGET=${1} ;
 	[ -z "${2}" ] && {
+		enable_output ;
+		echo "Set password to ${USER_TARGET} > " ;
 		chroot "${_MOUNT_POINT}" /usr/bin/passwd "${USER_TARGET}" ;
+		init_out ;
 		return 0 ;
 	}
 	shift ;
