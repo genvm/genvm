@@ -558,6 +558,7 @@ execute_post_install () {
 }
 
 interactive_seq () {
+	enable_output ;
 	echo -ne "\n\n*** ENTERING IN INTERACTIVE SHELL ***\n\n" ;
 	echo "You are here : ${PWD}" ;
 	echo "Virtual machine is monted here : ${_MOUNT_POINT}" ;
@@ -565,6 +566,7 @@ interactive_seq () {
 	echo -ne "\n\n" ;
 	/bin/bash --noprofile --norc ;
 	echo -ne "\n\n*** END OF INTERACTIVE SEQUENCE ***\n\n" ;
+	init_out ;
 }
 
 step_by_step () {
