@@ -457,14 +457,14 @@ EOF
 
 install_grub () {
 	echo "chroot ${_MOUNT_POINT} /usr/sbin/grub-install --no-floppy --grub-mkdevicemap=/boot/grub/device.map --root-directory=/ ${_NBD}" ;
-	chroot "${_MOUNT_POINT}" <<__EOF__
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
 source /etc/profile
 /usr/sbin/grub-install --no-floppy --grub-mkdevicemap=/boot/grub/device.map --root-directory=/ ${_NBD}
 __EOF__
 	[ $? -gt 0 ] && {
 		die "ERR > Installation of grub failed. Exit." ;
 	}
-	chroot "${_MOUNT_POINT}" <<__EOF__
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
 source /etc/profile
 grub-mkconfig | grep -v ^[[:blank:]]loopback.* | grep -v "^[[:blank:]]set\ root=.*" > /boot/grub/grub.cfg
 __EOF__
@@ -495,7 +495,7 @@ EOF
 }
 
 clean_install () {
-	chroot "${_MOUNT_POINT}" apt-get clean
+	chroot "${_MOUNT_POINT}" /usr/bin/apt-get clean
 }
 
 set_machine_name () {
@@ -503,7 +503,7 @@ set_machine_name () {
 }
 
 run_ch () {
-	CH="chroot ${MOUNT_POINT}" ;
+	CH="chroot ${MOUNT_POINT} /bin/bash" ;
 	$CH <<[*_EOF_*]
 source /etc/profile
 $(cat ${1})
@@ -516,7 +516,7 @@ excute_third_part () {
 
 	[ ! -z "${CMD_THIRD}" ] && {
 		MOUNT_POINT="${_MOUNT_POINT}" ;
-		CH="chroot ${MOUNT_POINT}" ;
+		CH="chroot ${MOUNT_POINT} /bin/bash" ;
 
 		[ -d "${CMD_THIRD}" ] && {
 			for _file in $(find "${CMD_THIRD}" \( -type f -o -type l \) \
