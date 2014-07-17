@@ -24,7 +24,7 @@
 
 trap end_of_script SIGINT SIGTERM SIGQUIT
 
-NEEDED_COMMANDS="qemu-img qemu-nbd fdisk sync kpartx losetup mktemp mount source \
+NEEDED_COMMANDS="qemu-img qemu-nbd parted sync kpartx losetup mktemp mount source \
 debootstrap cat chroot umount modprobe cat source mkswap basename readlink dirname" ;
 
 _SCRIPT_NAME=$(basename $0) ;
@@ -36,6 +36,7 @@ _LOOP="" ;
 _THIRD_ONLY=false ;
 _INTERACTIVE_SEQUENCE=false ;
 _TMPDIR="/tmp" ;
+_system_manager="grub2,"
 DOCKER="" ;
 EXTLINUX=false ;
 SECURE_TMOUT=1 ;
@@ -328,17 +329,9 @@ cleaning () {
 
 partitiondrive () {
 	[ -z "${_PARTITIONS}" ] && {
-		fdisk ${_NBD} <<EOF
-n
-p
-1
-
-
-a
-1
-p
-w
-EOF
+		parted -s ${_NBD} mklabel msdos
+		parted -s -a none ${_NBD} mkpart primary ext4 2048 100%
+		parted -s ${_NBD} set 1 boot on
 	}
 	return 0 ;
 }
@@ -418,8 +411,8 @@ umount_dev () {
 
 install_sys () {
 	[ -z "${DOCKER}" ] &&  {
-		echo "debootstrap --arch=${_ARCH} --include=grub2,${_KERNEL}${CMD_ADDPKG} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER}" ;
-		debootstrap --arch=${_ARCH} --include=grub2,${_KERNEL}${CMD_ADDPKG} --variant=minbase ${_VERSION} "${_MOUNT_POINT}" ${_SERVER} || {
+		echo "debootstrap --arch=${_ARCH} --include=${_system_manager}${_KERNEL}${CMD_ADDPKG} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER}" ;
+		debootstrap --arch=${_ARCH} --include=${_system_manager}${_KERNEL}${CMD_ADDPKG} --variant=minbase ${_VERSION} "${_MOUNT_POINT}" ${_SERVER} || {
 			die "ERR > installation failed. Exit." ;
 		}
 	} || {
@@ -638,6 +631,7 @@ while getopts ":a:hc:vDd:en:f:k:s:S:p:V:A:t:l:Tio:" opt ; do
 		d)
 			DOCKER=${OPTARG} ;;
 		e)
+			_system_manager="extlinux," ;
 			EXTLINUX=true ;;
 		f)
 			CMD_FORMAT=${OPTARG} ;;
