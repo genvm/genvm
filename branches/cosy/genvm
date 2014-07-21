@@ -39,13 +39,14 @@ _TMPDIR="/tmp" ;
 _system_manager="grub2,"
 DOCKER="" ;
 EXTLINUX=false ;
-SECURE_TMOUT=1 ;
+: ${SECURE_TMOUT=1} ;
 ARCH="amd64" ;
 KERNEL="linux-image-" ;
 VERSION="wheezy" ;
 SERVER="http://ftp.debian.org/debian" ;
 SIZE="5G" ;
 FORMAT="raw" ;
+NOKERNEL=false ;
 
 declare -a STEPS ;
 
@@ -67,6 +68,7 @@ Options
 	-h	: this message
 	-i	: run interactive shell before exiting
 	-k	: specify kernel version (default : ${KERNEL}${ARCH})
+	-K	: no install kernel (bypass -k)
 	-l	: file containing list of additionnal packages (one per line)
 	-n	: virtual machine name (default : $(hostname -s))
 	-o	: change default tmp dir location (path with no space ; default "${_TMPDIR}")
@@ -255,8 +257,13 @@ init_env () {
 		i386) 	KARCH="686" ;;
 		*)	die "ERR > Architecture unknown." ;;
 	esac
-	: ${_KERNEL:=${CMD_KERNEL:=${KERNEL}${KARCH}}} ;
-	echo "install kernel : ${_KERNEL}" ;
+	$NOKERNEL && {
+		_KERNEL="" ;
+		echo "no kernel"
+	} || {
+		: ${_KERNEL:=${CMD_KERNEL:=${KERNEL}${KARCH}}} ;
+		echo "install kernel : ${_KERNEL}" ;
+	}
 	: ${_ROOTPWD:="${CMD_ROOTPWD:="${ROOTPWD:=""}"}"} ;
 	[ ! -z "${_PARTITIONS}" ] && {
 		[ -r ${_PARTITIONS} ] && {
@@ -330,7 +337,7 @@ cleaning () {
 partitiondrive () {
 	[ -z "${_PARTITIONS}" ] && {
 		parted -s ${_NBD} mklabel msdos
-		parted -s -a none ${_NBD} mkpart primary ext4 2048 100%
+		parted -s -a none ${_NBD} mkpart primary ext4 2048s 100%
 		parted -s ${_NBD} set 1 boot on
 	}
 	return 0 ;
@@ -616,7 +623,7 @@ step_by_step () {
 
 # main part
 # Partitionnement in developpement option -P
-while getopts ":a:hc:vDd:en:f:k:s:S:p:V:A:t:l:Tio:" opt ; do
+while getopts ":a:hc:vDd:en:f:Kk:s:S:p:V:A:t:l:Tio:" opt ; do
 	case ${opt} in
 		h)
 			usage 0 ;;
@@ -639,6 +646,8 @@ while getopts ":a:hc:vDd:en:f:k:s:S:p:V:A:t:l:Tio:" opt ; do
 			_INTERACTIVE_SEQUENCE=true ;;
 		k)
 			CMD_KERNEL=${OPTARG} ;;
+		K)
+			NOKERNEL=true ;;
 		l)
 			CMD_LISTPKG=${OPTARG} ;;
 		o)
