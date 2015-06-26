@@ -1,0 +1,670 @@
+#!/bin/bash
+
+#
+#    Contact            : FHH <fhh@e-galaxie.org>
+#    Web                : https://sourceforge.net/projects/genvm
+#    Description        : "genvm" Is a powerfull script bash to generate 
+#	a minimal and complete virtual machine for KVM/QEMU, VirtualBox 
+#	and/or VMWare.
+#    Licence            : GPL3
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+trap end_of_script SIGINT SIGTERM SIGQUIT
+
+NEEDED_COMMANDS="qemu-img qemu-nbd fdisk sync kpartx losetup mktemp mount source \
+debootstrap cat chroot umount modprobe cat source mkswap basename readlink dirname" ;
+
+_SCRIPT_NAME=$(basename $0) ;
+_CONFIG_FILE="${HOME}/.${_SCRIPT_NAME}.conf /etc/${_SCRIPT_NAME}.conf" ;
+_VERBOSE=false ;
+_DEBUG=false ;
+_NBD="" ;
+_LOOP="" ;
+_THIRD_ONLY=false ;
+_INTERACTIVE_SEQUENCE=false ;
+_TMPDIR="/tmp" ;
+SECURE_TMOUT=1 ;
+ARCH="amd64" ;
+KERNEL="linux-image-" ;
+VERSION="wheezy" ;
+SERVER="http://ftp.debian.org/debian" ;
+SIZE="5G" ;
+FORMAT="raw" ;
+
+declare -a STEPS ;
+
+# Display help message :
+usage () {
+	cat <<EOF
+$0 [options] <hard drive image>
+
+  ** Note that root privileges are needed to run $0 **
+
+Options
+	-a	: architecture : amd64, i386 (default : ${ARCH})
+	-A	: additionals package to install in vm
+	-c	: specify a config file (first in ${_CONFIG_FILE})
+	-D	: debug mode
+	-f	: format of image : raw, qcow2, qcow, vmdk (default : ${FORMAT})
+	-h	: this message
+	-i	: run interactive shell before exiting
+	-k	: specify kernel version (default : ${KERNEL}${ARCH})
+	-l	: file containing list of additionnal packages (one per line)
+	-n	: virtual machine name (default : $(hostname -s))
+	-o	: change default tmp dir location (path with no space ; default "${_TMPDIR}")
+	-p	: root password (default : ask to user)
+	-P	: definition of partitions (not yet available)
+	-s	: image size (default : ${SIZE})
+	-S	: server to download debian (default : ${SERVER})
+	-t	: script to run after installation
+	-T	: run third party only
+	-v	: verbose mode
+	-V	: debian version : jessie, wheezy, ... (default : ${VERSION})
+
+There is 2 posibilities to run third party scripts :
+ - create a single file containing script to run ;
+ - create a directory who contain list of files numeroted and fix in witch environment
+the script run :
+	3rd/
+	 |- 01.chroot.norecommends
+	 |- 01.host.java
+	 ...
+	 |- 01.post.chown
+	 \`- 02.host.rc.local
+
+All script with "chroot" is executed in chroot environement, all with "post" are run after
+image umount. "host" Run in host who generate environnement.
+
+Script to run after installation can use some function and vaiables.
+All lines begin by \$CH is run in new environnement.
+Exemple :
+
+	\$CH adduser foo
+	set_passwd_to foo bar
+	wget http://my.site/archive.zip -O \${MOUNT_POINT}/archive.zip
+
+run "adduser" in new environnement, set foo password to bar and download http://my.site/archive.zip 
+from host and paste it in the new environement. 
+EOF
+	exit ${1:-1} ;
+}
+
+die () {
+	enable_output ;
+	echo "$@" >&2 ;
+	cleaning ;
+	exit 1 ;
+}
+
+Kill () {
+	enable_output ;
+	echo "$@" >&2 ;
+	echo "Hard end of script :-( " ;
+	exit 1 ;
+}
+
+disable_output () {
+	exec 2>&1 ;
+	exec 3>&1 ;
+	exec >/dev/null 2>&1 ;
+}
+
+enable_output () {
+	${_VERBOSE} || {
+		exec 1>&3 ;
+		exec 2>&3 ;
+	}
+}
+
+# find free loop
+find_loop () {
+	CALL_BACK=${1:-false} ;
+	_LOOP=$(losetup -f) ;
+	[ -z "${_LOOP}" ] && {
+		${CALL_BACK} && {
+			die "ERR > No loop device found. Execution failed" ;
+		} || { 
+			echo "No loop device found. Trying to load module" ;
+			modprobe loop || die "ERR > No loop device found and module cant be load" ;
+			find_loop true ;
+		}
+	}
+	echo "loop device ${_LOOP} seem free. Script use it." ;
+}
+
+are_you_root () {
+	[ ${EUID:=1000} -ne 0 ] && {
+		echo "ERR > Script only run as root" >&2 ;
+		exit 1 ;
+	}
+}
+
+# find free nbd
+find_nbd () {
+	CALL_BACK=${1:-false} ;
+	[ -e "/proc/partitions" ] || {
+		die "ERR > \"/proc/partitions\" not found. Execution failed" ;
+	}
+	for device in $(find /dev/ -maxdepth 1 -iname nbd* -exec basename {} \; | sort) ; do
+		echo "looking for network block device ${device}" ;
+		grep ${device} /proc/partitions || {
+			_NBD="/dev/${device}" ;
+			break ;
+		}
+	done
+	[ -z "${_NBD}" ] && {
+		${CALL_BACK} && {
+			die "ERR > No free network block device found. Execution failed. Try modprobe nbd and run again." ;
+		} || {
+			echo "No nbd device found. Trying to nbd module" ;
+			modprobe nbd || die "ERR > No nbd device found and module cant be load" ;
+			find_nbd true ;
+		}
+	}
+	echo "network block device /dev/${device} seem free. Script use it." ;
+}
+
+# Check requirements to script :
+check_requirements () {
+	for requirement in ${NEEDED_COMMANDS} ; do
+		echo -n "checking for \"$requirement\" ... " ;
+		command -v ${requirement} > /dev/null && {
+			echo "Ok" ;
+			continue ;
+		} || {
+			echo "required but not found !" ;
+			RETURN=1 ;
+		}
+		done
+	[ -z "${RETURN}" ] || { 
+		die "ERR > Requirement missing. Try \"-v\" for more informations" ; 
+	}
+}
+
+# init output
+init_out () {
+#	Select debug mode
+	${_DEBUG} && {
+		set -x
+		VERBOSE=true ;
+	}
+#	Select verbose mode
+	${_VERBOSE} || { disable_output ; } ;
+} 
+
+# init environment
+init_env () {
+#	Search a config file	
+	for fic in ${_CONFIG_FILE} ; do
+		[ -r "${fic}" ] && {
+			echo "\"${fic}\" found and is readable : loading" ;
+			source ${fic} ;
+			break ;
+		}
+	done
+	: ${_NAME:=$(hostname -s)} ;
+	echo "virtual machine name : ${_NAME}" ;
+	: ${_FORMAT:=${CMD_FORMAT:=${FORMAT}}} ;
+	echo "type of image : ${_FORMAT}" ;
+	: ${_SIZE:=${SIZE}} ;
+	echo "size of vm : ${_SIZE}" ;
+	: ${_ARCH:=${CMD_ARCH:=${ARCH}}} ;
+	echo "architecture : ${_ARCH}" ;
+	: ${_VERSION:=${CMD_VERSION:=${VERSION}}} ;
+	echo "install debian ${_VERSION}" ;
+	: ${_SERVER:=${CMD_SERVER:=${SERVER}}} ;
+	[ ! -z "${CMD_LISTPKG}" ] && {
+		[ -r ${CMD_LISTPKG} ] && {
+			__content=$(sed '{s/[[:blank:]]//g;s/#.*$//g;s,//.*,,g;/^$/d;s/-$//}' ${CMD_LISTPKG}) ;
+			[ -z "${CMD_ADDPKG}" ] && {
+				CMD_ADDPKG=$(echo ${__content} | sed -e 's/ /,/g') ;
+			} || {
+				CMD_ADDPKG=${CMD_ADDPKG},$(echo ${__content} | sed -e 's/ /,/g') ;
+			}
+		} || {
+			echo "list of package not readable. skip it." ;
+			CMD_LISTPKG="" ;
+		}
+	}
+	echo "use server ${_SERVER} to installation" ;
+	case ${_ARCH} in
+		amd64)	KARCH=${_ARCH} ;;
+		i386) 	KARCH="686" ;;
+		*)	die "ERR > Architecture unknown." ;;
+	esac
+	: ${_KERNEL:=${CMD_KERNEL:=${KERNEL}${KARCH}}} ;
+	echo "install kernel : ${_KERNEL}" ;
+	: ${_ROOTPWD:="${CMD_ROOTPWD:="${ROOTPWD:=""}"}"} ;
+	[ ! -z "${_PARTITIONS}" ] && {
+		[ -r ${_PARTITIONS} ] && {
+			echo "partitions file to use : ${_PARTITIONS}" ;
+		} || {
+			unset _PARTITIONS ;
+			echo "default partition schema (file can't be read)" ;
+		}
+	}
+	[ -z "${CMD_ADDPKG}" ] || \
+		CMD_ADDPKG=",${CMD_ADDPKG}" ;
+	find_nbd ;
+	find_loop ;
+}
+
+secure_tmout () {
+	[ ${SECURE_TMOUT:=0} -gt 0 ] && {
+		echo "Add delay for old or slow computers (${SECURE_TMOUT} sec)" ;
+		sleep ${SECURE_TMOUT} ;
+	}
+}
+
+create_vm_hd () {
+	echo "create vm hard drive ${HD_IMG} (format ${_FORMAT})" ;
+	qemu-img create -f ${_FORMAT} "${HD_IMG}" ${_SIZE} || \
+		die "ERR > making ${HD_IMG} failed. Execution failed" ;
+	echo "hard drive created" ;
+	secure_tmout ;
+}
+
+hd2nbd () {
+	HD_FULL_PATH=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}") ;
+	echo "associate vm hd (${HD_FULL_PATH}) to nbd (${_NBD})" ;
+	qemu-nbd -c ${_NBD} "${HD_FULL_PATH}" || \
+		die "ERR > association ${_NBD} to ${HD_IMG} failed. Execution failed" ;
+	STEPS[${#STEPS[@]}]="free_nbd" ;
+	echo "association ok" ;
+	secure_tmout ;
+}
+
+free_nbd () {
+	echo "freeing nbd ${_NBD}" ;
+	qemu-nbd -d ${_NBD} || {
+		unset STEPS[${#STEPS[@]}-1] ;
+		Kill "ERR > ${_NBD} wont be free." ;
+	}
+	echo "Freeing nbd ${_NBD} ok" ;
+	secure_tmout ;
+}
+
+end_of_script () {
+	echo "" ;
+	die " *** Script stopped by user *** " ;
+}
+
+cleaning () {
+	while [ ${#STEPS[@]} -gt 0 ] ; do
+		${STEPS[${#STEPS[@]}-1]} ;
+		unset STEPS[${#STEPS[@]}-1] ;
+	done
+	echo "delete temporary mount point (if needed)" ;
+	[ -d "${_MOUNT_POINT}" ] && {
+		grep "${_MOUNT_POINT}" /proc/mounts && {
+			die "ERR > mount point \"${_MOUNT_POINT}\" still in use. Script cant erase it." ;
+		} || {
+			rm -rf "${_MOUNT_POINT}" ;
+		}
+	}
+}
+
+partitiondrive () {
+	[ -z "${_PARTITIONS}" ] && {
+		fdisk ${_NBD} <<EOF
+n
+p
+1
+
+
+a
+1
+p
+w
+EOF
+	}
+	return 0 ;
+}
+
+detect_partitions () {
+	echo "detecting partitions" ;
+	kpartx -av ${_NBD} || {
+		die "ERR > partitions detection failed. Exit." ;
+	}
+	STEPS[${#STEPS[@]}]="free_part" ;
+	echo "partitions detected" ;
+	secure_tmout ;
+}
+
+free_part () {
+	echo "freeing partitions schema" ;
+	kpartx -dv ${_NBD} || {
+		unset STEPS[${#STEPS[@]}-1] ;
+		Kill "ERR > partitions wont be free. Exit." ;
+	}
+	echo "cleaning partitions ok" ;
+	secure_tmout ;
+}
+
+create_filesystem () {
+	[ -z "${_PARTITIONS}" ] && {
+		mkfs.ext4 /dev/mapper/$(basename ${_NBD})p1 || {
+			die "ERR > partition can't be formated. Exit." ;
+		}
+	}
+}
+
+assos2loop () {
+	echo "assosiate first partition to loop device" ;
+	losetup ${_LOOP} /dev/mapper/$(basename ${_NBD})p1 || {
+		die "ERR > associate first partition to loop device failed. Exit. Try modprobe loop and run again." ;
+	}
+	STEPS[${#STEPS[@]}]="free_loop" ;
+	echo "association partition / loop ok" ;
+	secure_tmout ;
+}
+
+free_loop () {
+	echo "freeing loop device" ;
+	losetup -d ${_LOOP} || {
+		unset STEPS[${#STEPS[@]}-1] ;
+		Kill "ERR > Freeing loop device failed. Exit. Try modprobe loop and run again." ;
+	}
+	echo "freeing loop ok" ;
+	secure_tmout ;
+}
+
+create_tempdir () {
+	_MOUNT_POINT="$(mktemp -p "${_TMPDIR}" -d)" ;
+	[ -z "${_MOUNT_POINT}" ] && {
+		die "ERR > Mount point not create. Exit" ;
+	}
+	echo "mount point created : ${_MOUNT_POINT}" ;
+}
+
+mount_partitions () {
+	echo "mounting filesystems" ;
+	mount ${_LOOP} "${_MOUNT_POINT}" || {
+		die "ERR > Impossible to mount ${_LOOP} in ${_MOUNT_POINT}. Exit." ;
+	}
+	STEPS[${#STEPS[@]}]="umount_dev" ;
+	echo "filesystems monted" ;
+}
+
+umount_dev () {
+	umount ${_LOOP} || {
+		unset STEPS[${#STEPS[@]}-1] ;
+		Kill "ERR > partition still monted. Exit." ;
+	}
+	echo "filesystems unmounted" ;
+}
+
+install_sys () {
+	echo "debootstrap --arch=${_ARCH} --include=grub2,${_KERNEL}${CMD_ADDPKG} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER}" ;
+	debootstrap --arch=${_ARCH} --include=grub2,${_KERNEL}${CMD_ADDPKG} --variant=minbase ${_VERSION} "${_MOUNT_POINT}" ${_SERVER} || {
+		die "ERR > installation failed. Exit." ;
+	}
+}
+
+mount_fs_dev () {
+	echo "mounting dev" ;
+	mount -o bind /dev/ "${_MOUNT_POINT}"/dev/ || {
+		die "ERR > failed to mount /dev in chroot" ;
+	}
+	STEPS[${#STEPS[@]}]="umount_fs_dev" ;
+	echo "dev mounted" ;
+}
+
+umount_fs_dev () {
+	umount -l "${_MOUNT_POINT}"/dev/ || {
+		unset steps[${#steps[@]}-1] ;
+		kill "err > failed to umount /dev in chroot" ;
+	}
+	echo "dev unmounted" ;
+}
+
+mount_fs_proc () {
+	echo "mounting proc" ;
+	mount -t proc proc "${_MOUNT_POINT}"/proc/ || {
+		die "ERR > failed to mount /proc in chroot" ;
+	}
+	STEPS[${#STEPS[@]}]="umount_fs_proc" ;
+	echo "proc mounted" ;
+}
+
+umount_fs_proc () {
+	umount -l "${_MOUNT_POINT}"/proc/ || {
+		unset steps[${#steps[@]}-1] ;
+		kill "err > failed to umount /proc in chroot" ;
+	}
+	echo "proc unmounted" ;
+}
+
+mapping_grub () {
+	cat > "${_MOUNT_POINT}"/boot/grub/device.map <<EOF
+(hd0) ${_NBD}
+(hd0,1) ${_LOOP}
+EOF
+}
+
+install_grub () {
+	echo "chroot ${_MOUNT_POINT} /usr/sbin/grub-install --no-floppy --grub-mkdevicemap=/boot/grub/device.map --root-directory=/ ${_NBD}" ;
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
+source /etc/profile
+/usr/sbin/grub-install --no-floppy --grub-mkdevicemap=/boot/grub/device.map --root-directory=/ ${_NBD}
+__EOF__
+	[ $? -gt 0 ] && {
+		die "ERR > Installation of grub failed. Exit." ;
+	}
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
+source /etc/profile
+grub-mkconfig | grep -v ^[[:blank:]]loopback.* | grep -v "^[[:blank:]]set\ root=.*" > /boot/grub/grub.cfg
+__EOF__
+	[ $? -gt 0 ] && {
+		echo "WARNING > Update grub2 failed !" >&2 ;
+	}
+}
+
+set_passwd_to () {
+	[ -z "${1}" ] && {
+		echo "Nothing to do. Skip password setting." ;
+		return 0 ;
+	}
+	USER_TARGET=${1} ;
+	[ -z "${2}" ] && {
+		enable_output ;
+		echo "Set password to ${USER_TARGET} > " ;
+		chroot "${_MOUNT_POINT}" /usr/bin/passwd "${USER_TARGET}" ;
+		init_out ;
+		return 0 ;
+	}
+	shift ;
+	PASSWD="${@}" ;
+	chroot "${_MOUNT_POINT}" /usr/bin/passwd "${USER_TARGET}" <<EOF
+${PASSWD}
+${PASSWD}
+EOF
+}
+
+clean_install () {
+	chroot "${_MOUNT_POINT}" /usr/bin/apt-get clean
+}
+
+set_machine_name () {
+	echo ${_NAME} > "${_MOUNT_POINT}"/etc/hostname ;
+}
+
+run_ch () {
+	CH="chroot ${MOUNT_POINT} /bin/bash" ;
+	$CH <<[*_EOF_*]
+source /etc/profile
+$(cat ${1})
+[*_EOF_*]
+}
+
+excute_third_part () {
+	echo "Keep current location for bad scripters ..." ;
+	__current_location=${PWD} ;
+
+	[ ! -z "${CMD_THIRD}" ] && {
+		MOUNT_POINT="${_MOUNT_POINT}" ;
+		CH="chroot ${MOUNT_POINT} /bin/bash" ;
+
+		[ -d "${CMD_THIRD}" ] && {
+			for _file in $(find "${CMD_THIRD}" \( -type f -o -type l \) \
+				-a -regex "${CMD_THIRD}/[0-9]+.*" | sort) ; do
+				echo ${_file} | grep -P "[0-9]{2}\.chroot.*" && {
+					echo "Running ${_file} in chroot environment" ;
+					run_ch "${_file}"
+				}
+				echo ${_file} | grep -P "[0-9]{2}\.host.*" && {
+					echo "Running ${_file} on host" ;
+					source ${_file} ;
+					cd ${__current_location} ;
+				}
+			done
+		}
+		[ -f "${CMD_THIRD}" ] && {
+			[ -r "${CMD_THIRD}" ] && {
+				. "${CMD_THIRD}" ;
+			} || {
+				echo "Third party unreadable. Ignored." ;
+			}
+		}
+	}
+	cd ${__current_location} ;
+}
+
+execute_post_install () {
+	[ ! -z "${CMD_THIRD}" ] && {
+		[ -d "${CMD_THIRD}" ] && {
+			for _file in $(find "${CMD_THIRD}" \( -type f -o -type l \) \
+				-a -regex "${CMD_THIRD}/[0-9]+.*" | sort) ; do
+				echo ${_file} | grep -P "[0-9]{2}\.post.*" && {
+					echo "Running ${_file} after all" ;
+					source ${_file} ;
+				}
+			done
+		}
+	}
+}
+
+interactive_seq () {
+	enable_output ;
+	echo -ne "\n\n*** ENTERING IN INTERACTIVE SHELL ***\n\n" ;
+	echo "You are here : ${PWD}" ;
+	echo "Virtual machine is monted here : ${_MOUNT_POINT}" ;
+	echo "Press \"Ctrl+d\" or \"exit\" to exit" ; 
+	echo -ne "\n\n" ;
+	/bin/bash --noprofile --norc ;
+	echo -ne "\n\n*** END OF INTERACTIVE SEQUENCE ***\n\n" ;
+	init_out ;
+}
+
+step_by_step () {
+ 	${_THIRD_ONLY} || create_vm_hd ;
+	hd2nbd ;
+	${_THIRD_ONLY} || partitiondrive ;
+	detect_partitions ;
+	${_THIRD_ONLY} || create_filesystem ;
+	assos2loop ;
+	create_tempdir ;
+	mount_partitions ;
+	${_THIRD_ONLY} || install_sys ;
+	mount_fs_dev ;
+	mount_fs_proc ;
+	${_THIRD_ONLY} || mapping_grub ;
+	${_THIRD_ONLY} || install_grub ;
+	${_THIRD_ONLY} || set_machine_name ;
+	${_THIRD_ONLY} || set_passwd_to root "${_ROOTPWD}" ;
+	${_THIRD_ONLY} || clean_install ;
+	excute_third_part ;
+	${_INTERACTIVE_SEQUENCE} && interactive_seq ;
+	cleaning ;
+	execute_post_install ;
+}
+
+# main part
+# Partitionnement in developpement option -P
+while getopts ":a:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:" opt ; do
+	case ${opt} in
+		h)
+			usage 0 ;;
+		a)
+			CMD_ARCH=${OPTARG} ;;
+		A)
+			CMD_ADDPKG=${OPTARG} ;;
+		c)
+			_CONFIG_FILE=${OPTARG} ;;
+		D)
+			_DEBUG=true ;;
+		f)
+			CMD_FORMAT=${OPTARG} ;;
+		i)
+			_INTERACTIVE_SEQUENCE=true ;;
+		k)
+			CMD_KERNEL=${OPTARG} ;;
+		l)
+			CMD_LISTPKG=${OPTARG} ;;
+		o)
+			echo "${OPTARG}" | grep [[:blank:]] > /dev/null && {
+				echo -e "> No space authorized in name of alternative temp dir (option \"-o\").\n" ;
+				usage ;
+			}
+			[ -d "${OPTARG}" -a -w "${OPTARG}" ] && {
+				_TMPDIR="${OPTARG%/}" ;
+			} || {
+				echo "WARN > ${OPTARG} not a directory or not writable. Option ignored" ;
+			} ;;
+		p)
+			CMD_ROOTPWD="${OPTARG}" ;;
+		P)
+			_PARTITIONS=${OPTARG} ;;
+		s)
+			SIZE=${OPTARG} ;;
+		S)
+			CMD_SERVER=${OPTARG} ;;
+		t)
+			CMD_THIRD=${OPTARG%/} ;;
+		T)
+			_THIRD_ONLY=true ;;
+		n)
+			_NAME="${OPTARG,,}" ;;
+		v)
+			_VERBOSE=true ;;
+		V)
+			CMD_VERSION=${OPTARG} ;;
+		:)
+			echo -e "> Option -$OPTARG requiert un argument.\n" ;
+			usage ;;
+		*)
+			echo -e "> Invalide option \"-$OPTARG\".\n" ;
+			usage ;;
+	esac
+done
+
+shift $((OPTIND-1))
+case $# in
+	0)
+		usage 0 ;;
+	1)
+		HD_IMG="${1}" ;;
+	*)
+		echo -e "> Bad number of arguments\n\t${0} <hard drive image>\n" ;
+		usage ;;
+esac
+
+are_you_root ;
+init_out ;
+check_requirements ;
+init_env ;
+step_by_step ;
+
