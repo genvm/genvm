@@ -1,0 +1,251 @@
+#!/bin/bash
+
+trap end_of_script SIGINT SIGTERM SIGQUIT
+
+NEEDED_COMMANDS="debootstrap tar wget"
+
+_SCRIPT_NAME=$(basename $0)
+_CONFIG_FILE="${HOME}/.genvm/${_SCRIPT_NAME}.conf /etc/genvm/${_SCRIPT_NAME}.conf"
+
+_VERBOSE=false
+_DEBUG=false
+
+_TMPDIR="/tmp"
+
+ARCH="amd64"
+VERSION="jessie"
+SERVER="http://ftp.debian.org/debian"
+
+# Display help message :
+usage () {
+	cat <<EOF
+$0 [options] <archivename>
+
+Script to generate an archive of debian to deploy with genvm
+
+  ** Note that root privileges are needed to run $0 **
+
+Options
+	-a  : architecture : amd64, i386 (default : ${ARCH})
+	-A  : additionals package to install in vm
+	-c  : specify a config file (first in ${_CONFIG_FILE})
+	-D  : debug mode
+	-h	: this message
+	-l  : file containing list of additionnal packages (one per line)
+	-o	: change default tmp dir location (path with no space ; default "${_TMPDIR}")
+	-S  : server to download debian (default : ${SERVER})
+	-v  : verbose mode
+	-V  : debian version : jessie, wheezy, stretch ... (default : ${VERSION})
+EOF
+	exit ${1:-1} ;
+}
+
+die () {
+	enable_output ;
+	echo "$@" >&2 ;
+	cleaning ;
+	exit 1 ;
+}
+
+Kill () {
+	enable_output ;
+	echo "$@" >&2 ;
+	echo "Hard end of script :-( " ;
+	exit 1 ;
+}
+
+disable_output () {
+	exec 2>&1 ;
+	exec 3>&1 ;
+	exec >/dev/null 2>&1 ;
+}
+
+enable_output () {
+	${_VERBOSE} || {
+		exec 1>&3 ;
+		exec 2>&3 ;
+	}
+}
+
+are_you_root () {
+	[ ${EUID:=1000} -ne 0 ] && {
+		echo "ERR > Script only run as root" >&2 ;
+		exit 1 ;
+	}
+}
+
+# Check requirements to script :
+check_requirements () {
+	for requirement in ${NEEDED_COMMANDS} ; do
+		echo -n "checking for \"$requirement\" ... " ;
+		command -v ${requirement} > /dev/null && {
+			echo "Ok" ;
+			continue ;
+		} || {
+			echo "required but not found !" ;
+			RETURN=1 ;
+		}
+		done
+	[ -z "${RETURN}" ] || { 
+		die "ERR > Requirement missing. Try \"-v\" for more informations" ; 
+	}
+}
+
+# init output
+init_out () {
+#	Select debug mode
+	${_DEBUG} && {
+		set -x
+		VERBOSE=true ;
+	}
+#	Select verbose mode
+	${_VERBOSE} || { disable_output ; } ;
+} 
+
+# init environment
+init_env () {
+#	Search a config file	
+	for fic in ${_CONFIG_FILE} ; do
+		[ -r "${fic}" ] && {
+			echo "\"${fic}\" found and is readable : loading" ;
+			source ${fic} ;
+			break ;
+		}
+	done
+	: ${_ARCH:=${CMD_ARCH:=${ARCH}}} ;
+	echo "architecture : ${_ARCH}" ;
+	: ${_VERSION:=${CMD_VERSION:=${VERSION}}} ;
+	echo "install debian ${_VERSION}" ;
+	echo "Generate ${ARCHIVE_NAME}"
+	: ${_SERVER:=${CMD_SERVER:=${SERVER}}} ;
+	[[ ! -z "${CMD_LISTPKG}" ]] && {
+		[[ -r ${CMD_LISTPKG} ]] && {
+			__content=$(sed '{s/[[:blank:]]//g;s/#.*$//g;s,//.*,,g;/^$/d;s/-$//}' ${CMD_LISTPKG}) ;
+			[ -z "${CMD_ADDPKG}" ] && {
+				CMD_ADDPKG=$(echo ${__content}) ;
+			} || {
+				CMD_ADDPKG=${CMD_ADDPKG},$(echo ${__content}) ;
+			}
+		} || {
+			echo "list of package not readable. skip it." ;
+			CMD_LISTPKG="" ;
+		}
+	}
+	echo "use server ${_SERVER} to installation" ;
+	case ${_ARCH} in
+		amd64)	KARCH=${_ARCH} ;;
+		i386) 	KARCH="686" ;;
+		*)	die "ERR > Architecture unknown." ;;
+	esac
+	[ -z "${CMD_ADDPKG}" ] || \
+		CMD_ADDPKG="${CMD_ADDPKG//,/ }" ;
+}
+
+end_of_script () {
+	echo "" ;
+	die " *** Script stopped by user *** " ;
+}
+
+cleaning () {
+	echo "delete temporary mount point (if needed)" ;
+	[ -d "${_MOUNT_POINT}" ] && {
+			rm -rf "${_MOUNT_POINT}" ;
+	}
+}
+
+create_tempdir () {
+	_MOUNT_POINT="$(mktemp -p "${_TMPDIR}" -d)" ;
+}
+
+install_sys () {
+	echo "debootstrap --arch=${_ARCH} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER}" ;
+	debootstrap --arch=${_ARCH} --variant=minbase ${_VERSION} "${_MOUNT_POINT}" ${_SERVER} || {
+		die "ERR > installation failed. Exit." ;
+	}
+}
+
+install_pkgs () {
+	[[ -z ${CMD_ADDPKG} ]] && return 0
+	echo "Installing package \"${CMD_ADDPKG}\""
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
+source /etc/profile
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install --no-install-recommends -y ${CMD_ADDPKG//,/ }
+__EOF__
+}
+
+clean_install () {
+	chroot "${_MOUNT_POINT}" /usr/bin/apt-get clean
+}
+
+generate_archive () {
+	tar -cvzf ${ARCHIVE_NAME} -C "${_MOUNT_POINT}/" ./
+}
+
+step_by_step () {
+	create_tempdir
+	install_sys
+	install_pkgs
+	clean_install
+	generate_archive
+	cleaning
+}
+
+# main part
+while getopts ":a:hc:vDS:V:A:l:o:" opt ; do
+	case ${opt} in
+		h)
+			usage 0 ;;
+		a)
+			CMD_ARCH=${OPTARG} ;;
+		A)
+			CMD_ADDPKG=${OPTARG} ;;
+		c)
+			_CONFIG_FILE=${OPTARG} ;;
+		D)
+			_DEBUG=true ;;
+		l)
+			CMD_LISTPKG=${OPTARG} ;;
+		o)
+			echo "${OPTARG}" | grep [[:blank:]] > /dev/null && {
+				echo -e "> No space authorized in name of alternative temp dir (option \"-o\").\n" ;
+				usage ;
+			}
+			[ -d "${OPTARG}" -a -w "${OPTARG}" ] && {
+				_TMPDIR="${OPTARG%/}" ;
+			} || {
+				echo "WARN > ${OPTARG} not a directory or not writable. Option ignored" ;
+			} ;;
+		S)
+			CMD_SERVER=${OPTARG} ;;
+		v)
+			_VERBOSE=true ;;
+		V)
+			CMD_VERSION=${OPTARG} ;;
+		:)
+			echo -e "> Option -$OPTARG requiert un argument.\n" ;
+			usage ;;
+		*)
+			echo -e "> Invalide option \"-$OPTARG\".\n" ;
+			usage ;;
+	esac
+done
+
+shift $((OPTIND-1))
+case $# in
+	0)
+		usage 0 ;;
+	1)
+		ARCHIVE_NAME="${1}" ;;
+	*)
+		echo -e "> Bad number of arguments\n\t${0} <hard drive image>\n" ;
+		usage ;;
+esac
+
+are_you_root ;
+init_out ;
+check_requirements ;
+init_env ;
+step_by_step ;
+

@@ -24,25 +24,29 @@
 
 trap end_of_script SIGINT SIGTERM SIGQUIT
 
-NEEDED_COMMANDS="qemu-img qemu-nbd fdisk sync kpartx losetup mktemp mount source \
+NEEDED_COMMANDS="qemu-img qemu-nbd parted sync kpartx losetup mktemp mount source \
 debootstrap cat chroot umount modprobe cat source mkswap basename readlink dirname" ;
 
-_SCRIPT_NAME=$(basename $0) ;
-_CONFIG_FILE="${HOME}/.${_SCRIPT_NAME}.conf /etc/${_SCRIPT_NAME}.conf" ;
-_VERBOSE=false ;
-_DEBUG=false ;
-_NBD="" ;
-_LOOP="" ;
-_THIRD_ONLY=false ;
-_INTERACTIVE_SEQUENCE=false ;
-_TMPDIR="/tmp" ;
-SECURE_TMOUT=1 ;
-ARCH="amd64" ;
-KERNEL="linux-image-" ;
-VERSION="wheezy" ;
-SERVER="http://ftp.debian.org/debian" ;
-SIZE="5G" ;
-FORMAT="raw" ;
+_SCRIPT_NAME=$(basename $0)
+_CONFIG_FILE="${HOME}/.${_SCRIPT_NAME}.conf /etc/${_SCRIPT_NAME}.conf"
+_VERBOSE=false
+_DEBUG=false
+_NBD=""
+_LOOP=""
+_THIRD_ONLY=false
+_INTERACTIVE_SEQUENCE=false
+_TMPDIR="/tmp"
+SECURE_TMOUT=1
+ARCH="amd64"
+KERNEL="linux-image-"
+VERSION="jessie"
+SERVER="http://ftp.debian.org/debian"
+SIZE="5G"
+FORMAT="raw"
+_QUICK_DEPLOY=false
+
+_urlform='(https?|ftp)://[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]'
+_apt_opts="--no-install-recommends"
 
 declare -a STEPS ;
 
@@ -67,12 +71,13 @@ Options
 	-o	: change default tmp dir location (path with no space ; default "${_TMPDIR}")
 	-p	: root password (default : ask to user)
 	-P	: definition of partitions (not yet available)
+	-Q	: Quick deploy of file passed in argument
 	-s	: image size (default : ${SIZE})
 	-S	: server to download debian (default : ${SERVER})
 	-t	: script to run after installation
 	-T	: run third party only
 	-v	: verbose mode
-	-V	: debian version : jessie, wheezy, ... (default : ${VERSION})
+	-V	: debian version : stretch, jessie, wheezy, ... (default : ${VERSION})
 
 There is 2 posibilities to run third party scripts :
  - create a single file containing script to run ;
@@ -207,7 +212,7 @@ init_out () {
 
 # init environment
 init_env () {
-#	Search a config file	
+#	Search a config file
 	for fic in ${_CONFIG_FILE} ; do
 		[ -r "${fic}" ] && {
 			echo "\"${fic}\" found and is readable : loading" ;
@@ -223,16 +228,18 @@ init_env () {
 	echo "size of vm : ${_SIZE}" ;
 	: ${_ARCH:=${CMD_ARCH:=${ARCH}}} ;
 	echo "architecture : ${_ARCH}" ;
-	: ${_VERSION:=${CMD_VERSION:=${VERSION}}} ;
-	echo "install debian ${_VERSION}" ;
+	${_QUICK_DEPLOY} || {
+		: ${_VERSION:=${CMD_VERSION:=${VERSION}}} ;
+		echo "install debian ${_VERSION}" ;
+	}
 	: ${_SERVER:=${CMD_SERVER:=${SERVER}}} ;
-	[ ! -z "${CMD_LISTPKG}" ] && {
-		[ -r ${CMD_LISTPKG} ] && {
+	[[ ! -z "${CMD_LISTPKG}" ]] && {
+		[[ -r ${CMD_LISTPKG} ]] && {
 			__content=$(sed '{s/[[:blank:]]//g;s/#.*$//g;s,//.*,,g;/^$/d;s/-$//}' ${CMD_LISTPKG}) ;
 			[ -z "${CMD_ADDPKG}" ] && {
-				CMD_ADDPKG=$(echo ${__content} | sed -e 's/ /,/g') ;
+				CMD_ADDPKG=$(echo ${__content}) ;
 			} || {
-				CMD_ADDPKG=${CMD_ADDPKG},$(echo ${__content} | sed -e 's/ /,/g') ;
+				CMD_ADDPKG=${CMD_ADDPKG},$(echo ${__content}) ;
 			}
 		} || {
 			echo "list of package not readable. skip it." ;
@@ -257,7 +264,7 @@ init_env () {
 		}
 	}
 	[ -z "${CMD_ADDPKG}" ] || \
-		CMD_ADDPKG=",${CMD_ADDPKG}" ;
+		CMD_ADDPKG="${CMD_ADDPKG//,/ }" ;
 	find_nbd ;
 	find_loop ;
 }
@@ -280,7 +287,7 @@ create_vm_hd () {
 hd2nbd () {
 	HD_FULL_PATH=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}") ;
 	echo "associate vm hd (${HD_FULL_PATH}) to nbd (${_NBD})" ;
-	qemu-nbd -c ${_NBD} "${HD_FULL_PATH}" || \
+	qemu-nbd -c ${_NBD} -f ${_FORMAT} "${HD_FULL_PATH}" || \
 		die "ERR > association ${_NBD} to ${HD_IMG} failed. Execution failed" ;
 	STEPS[${#STEPS[@]}]="free_nbd" ;
 	echo "association ok" ;
@@ -319,17 +326,9 @@ cleaning () {
 
 partitiondrive () {
 	[ -z "${_PARTITIONS}" ] && {
-		fdisk ${_NBD} <<EOF
-n
-p
-1
-
-
-a
-1
-p
-w
-EOF
+		parted -s ${_NBD} mklabel msdos
+		parted -s -a none ${_NBD} mkpart primary ext4 2048s 100%
+		parted -s ${_NBD} set 1 boot on
 	}
 	return 0 ;
 }
@@ -408,10 +407,32 @@ umount_dev () {
 }
 
 install_sys () {
-	echo "debootstrap --arch=${_ARCH} --include=grub2,${_KERNEL}${CMD_ADDPKG} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER}" ;
-	debootstrap --arch=${_ARCH} --include=grub2,${_KERNEL}${CMD_ADDPKG} --variant=minbase ${_VERSION} "${_MOUNT_POINT}" ${_SERVER} || {
-		die "ERR > installation failed. Exit." ;
+	${_QUICK_DEPLOY} && {
+		echo "Deploy archive of system from : \"${QUICK_DEPLOY_ARCHIVE}\""
+		if [[ ${QUICK_DEPLOY_ARCHIVE} =~ ${_urlform} ]] ; then
+			wget "${QUICK_DEPLOY_ARCHIVE}" -O - | tar xzvf - -C "${_MOUNT_POINT}/" || \
+				die "ERR > Problem with archive at \"${QUICK_DEPLOY_ARCHIVE}\""
+		elif [[ -f "${QUICK_DEPLOY_ARCHIVE}" ]] ; then
+			tar xzvf "${QUICK_DEPLOY_ARCHIVE}" -C "${_MOUNT_POINT}" || \
+				die "ERR > Problem with local file \"${QUICK_DEPLOY_ARCHIVE}\""
+		fi
+	} || {
+		echo "debootstrap --arch=${_ARCH} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER}" ;
+		debootstrap --arch=${_ARCH} --variant=minbase ${_VERSION} "${_MOUNT_POINT}" ${_SERVER} || {
+			die "ERR > installation failed. Exit." ;
+		}
 	}
+}
+
+install_pkgs () {
+	[[ -z ${CMD_ADDPKG} ]] && return 0
+	echo "Installing package \"${CMD_ADDPKG}\""
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
+source /etc/profile
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install ${_apt_opts} -y ${CMD_ADDPKG//,/ }
+__EOF__
 }
 
 mount_fs_dev () {
@@ -448,18 +469,11 @@ umount_fs_proc () {
 	echo "proc unmounted" ;
 }
 
-mapping_grub () {
-	cat > "${_MOUNT_POINT}"/boot/grub/device.map <<EOF
-(hd0) ${_NBD}
-(hd0,1) ${_LOOP}
-EOF
-}
-
 install_grub () {
-	echo "chroot ${_MOUNT_POINT} /usr/sbin/grub-install --no-floppy --grub-mkdevicemap=/boot/grub/device.map --root-directory=/ ${_NBD}" ;
+	echo "chroot ${_MOUNT_POINT} /usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules='ext2 part_msdos' ${_NBD}" ;
 	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
 source /etc/profile
-/usr/sbin/grub-install --no-floppy --grub-mkdevicemap=/boot/grub/device.map --root-directory=/ ${_NBD}
+/usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules="ext2 part_msdos" ${_NBD}
 __EOF__
 	[ $? -gt 0 ] && {
 		die "ERR > Installation of grub failed. Exit." ;
@@ -579,9 +593,9 @@ step_by_step () {
 	create_tempdir ;
 	mount_partitions ;
 	${_THIRD_ONLY} || install_sys ;
-	mount_fs_dev ;
-	mount_fs_proc ;
-	${_THIRD_ONLY} || mapping_grub ;
+	install_pkgs
+	mount_fs_dev
+	mount_fs_proc
 	${_THIRD_ONLY} || install_grub ;
 	${_THIRD_ONLY} || set_machine_name ;
 	${_THIRD_ONLY} || set_passwd_to root "${_ROOTPWD}" ;
@@ -594,7 +608,7 @@ step_by_step () {
 
 # main part
 # Partitionnement in developpement option -P
-while getopts ":a:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:" opt ; do
+while getopts ":a:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:Q:" opt ; do
 	case ${opt} in
 		h)
 			usage 0 ;;
@@ -628,6 +642,9 @@ while getopts ":a:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:" opt ; do
 			CMD_ROOTPWD="${OPTARG}" ;;
 		P)
 			_PARTITIONS=${OPTARG} ;;
+		Q)
+			_QUICK_DEPLOY=true
+			QUICK_DEPLOY_ARCHIVE="${OPTARG}" ;;
 		s)
 			SIZE=${OPTARG} ;;
 		S)
