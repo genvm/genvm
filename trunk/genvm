@@ -44,7 +44,7 @@ BOOTLOADER="grub2"
 VERSION="jessie"
 SERVER="http://ftp.debian.org/debian"
 SIZE="5G"
-FORMAT="raw"
+FORMAT="vmdk"
 
 declare -a STEPS
 
@@ -285,7 +285,7 @@ create_vm_hd () {
 hd2nbd () {
 	HD_FULL_PATH=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}")
 	echo "associate vm hd (${HD_FULL_PATH}) to nbd (${_NBD})"
-	qemu-nbd -c ${_NBD} -f ${_FORMAT} "${HD_FULL_PATH}" || \
+	qemu-nbd -c ${_NBD} "${HD_FULL_PATH}" || \
 		die "ERR > association ${_NBD} to ${HD_IMG} failed. Execution failed"
 	STEPS[${#STEPS[@]}]="free_nbd"
 	echo "association ok"
