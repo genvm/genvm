@@ -1,0 +1,872 @@
+#!/bin/bash
+
+#
+#    Contact            : FHH <fhh@e-galaxie.org>
+#    Web                : https://sourceforge.net/projects/genvm
+#    Description        : "genvm" Is a powerfull script bash to generate 
+#	a minimal and complete virtual machine for KVM/QEMU, VirtualBox 
+#	and/or VMWare.
+#    Licence            : GPL3
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+trap end_of_script SIGINT SIGTERM SIGQUIT
+
+NEEDED_COMMANDS="qemu-img qemu-nbd parted sync kpartx losetup mktemp mount source \
+debootstrap cat chroot umount modprobe cat source mkswap basename readlink dirname \
+blkid"
+
+_SCRIPT_NAME=$(basename $0)
+_CONFIG_FILE="${HOME}/.${_SCRIPT_NAME}.conf /etc/${_SCRIPT_NAME}.conf"
+_VERBOSE=false
+_DEBUG=false
+_NBD=""
+_LOOP=""
+_THIRD_ONLY=false
+_INTERACTIVE_SEQUENCE=false
+_TMPDIR="/tmp"
+_PARTBOOT=
+APT_OPTS="--no-install-recommends"
+SECURE_TMOUT=1
+ARCH="amd64"
+KERNEL="linux-image-"
+BOOTLOADER="grub2"
+VERSION="jessie"
+SERVER="http://ftp.debian.org/debian"
+SIZE="5G"
+FORMAT="vmdk"
+MINIMAL_SIZE=500M
+
+declare -a STEPS PARTSTABLE ORDER_TABLE MONTEDPARTS
+
+REGEXP_SWAP='^sw(ap)?$'
+REGEXP_APPROXIMATIVE_SWAP='.*sw(ap)?.*'
+# WARN=false
+_LOGIC=false
+
+# Display help message :
+usage () {
+	cat <<EOF
+$0 [options] <hard drive image>
+
+  ** Note that root privileges are needed to run $0 **
+
+Options
+	-a	: architecture : amd64, i386 (default : ${ARCH})
+	-A	: additionals package to install in vm
+	-b	: bootloader (only ${BOOTLOADER} supported actualy)
+	-c	: specify a config file (first in ${_CONFIG_FILE})
+	-D	: debug mode
+	-f	: format of image : raw, qcow2, qcow, vmdk (default : ${FORMAT})
+	-h	: this message
+	-i	: run interactive shell before exiting
+	-k	: specify kernel version (default : ${KERNEL}${ARCH})
+	-l	: file containing list of additionnal packages (one per line)
+	-n	: virtual machine name (default : $(hostname -s))
+	-o	: change default tmp dir location (path with no space ; default "${_TMPDIR}")
+	-p	: root password (default : ask to user)
+	-P	: definition of partitions
+	-s	: image size (default : ${SIZE})
+	-S	: server to download debian (default : ${SERVER})
+	-t	: script to run after installation
+	-T	: run third party only
+	-v	: verbose mode
+	-V	: debian version : stretch, jessie, wheezy, ... (default : ${VERSION})
+
+There is 2 posibilities to run third party scripts :
+ - create a single file containing script to run ;
+ - create a directory who contain list of files numeroted and fix in witch environment
+the script run :
+	3rd/
+	 |- 01.chroot.norecommends
+	 |- 01.host.java
+	 ...
+	 |- 01.post.chown
+	 \`- 02.host.rc.local
+
+All script with "chroot" is executed in chroot environement, all with "post" are run after
+image umount. "host" Run in host who generate environnement.
+
+Script to run after installation can use some function and vaiables.
+All lines begin by \$CH is run in new environnement.
+Exemple :
+
+	\$CH adduser foo
+	set_passwd_to foo bar
+	wget http://my.site/archive.zip -O \${MOUNT_POINT}/archive.zip
+
+run "adduser" in new environnement, set foo password to bar and download http://my.site/archive.zip 
+from host and paste it in the new environement. 
+EOF
+	exit ${1:-1}
+}
+
+die () {
+	enable_output
+	echo "$@" >&2
+	cleaning
+	exit 1
+}
+
+Kill () {
+	enable_output
+	echo "$@" >&2
+	echo "Hard end of script :-( "
+	exit 1
+}
+
+disable_output () {
+	exec 2>&1
+	exec 3>&1
+	exec >/dev/null 2>&1
+}
+
+enable_output () {
+	${_VERBOSE} || {
+		exec 1>&3
+		exec 2>&3
+	}
+}
+
+# find free loop
+find_loop () {
+	CALL_BACK=${1:-false}
+	_LOOP=$(losetup -f)
+	[ -z "${_LOOP}" ] && {
+		${CALL_BACK} && {
+			die "ERR > No loop device found. Execution failed"
+		} || { 
+			echo "No loop device found. Trying to load module"
+			modprobe loop || die "ERR > No loop device found and module cant be load"
+			find_loop true
+		}
+	}
+	echo "loop device ${_LOOP} seem free. Script use it."
+}
+
+are_you_root () {
+	[ ${EUID:=1000} -ne 0 ] && {
+		echo "ERR > Script only run as root" >&2
+		exit 1
+	}
+}
+
+# find free nbd
+find_nbd () {
+	CALL_BACK=${1:-false}
+	[ -e "/proc/partitions" ] || \
+		die "ERR > \"/proc/partitions\" not found. Execution failed"
+	for device in $(find /dev/ -maxdepth 1 -iname nbd* -exec basename {} \; | sort) ; do
+		echo "looking for network block device ${device}"
+		grep ${device} /proc/partitions || {
+			_NBD="/dev/${device}"
+			break
+		}
+	done
+	[ -z "${_NBD}" ] && {
+		${CALL_BACK} && {
+			die "ERR > No free network block device found. Execution failed. Try modprobe nbd and run again."
+		} || {
+			echo "No nbd device found. Trying to nbd module"
+			modprobe nbd || die "ERR > No nbd device found and module cant be load"
+			find_nbd true
+		}
+	}
+	echo "network block device /dev/${device} seem free. Script use it."
+}
+
+# Check requirements to script :
+check_requirements () {
+	for requirement in ${NEEDED_COMMANDS} ; do
+		echo -n "checking for \"$requirement\" ... "
+		command -v ${requirement} > /dev/null && {
+			echo "Ok"
+			continue
+		} || {
+			echo "required but not found !"
+			RETURN=1
+		}
+		done
+	[[ -z "${RETURN}" ]] || \
+		die "ERR > Requirement missing. Try \"-v\" for more informations"
+}
+
+# init output
+init_out () {
+#	Select debug mode
+	${_DEBUG} && {
+		set -x
+		VERBOSE=true
+	}
+#	Select verbose mode
+	${_VERBOSE} || { disable_output ; }
+} 
+
+size_converter () {
+	[[ -z "${1//[0-9]}" ]] && {
+		echo ${1}
+		return 0
+	}
+	case "${1: -1}" in
+		K|k)
+			size_converter $(( 1024 * ${1%[k|K]} )) ;;
+		M|m)
+			size_converter $(( 1024 * ${1%[m|M]} ))k ;;
+		G|g)
+			size_converter $(( 1024 * ${1%[g|G]} ))m ;;
+		T|t)
+			size_converter $(( 1024 * ${1%[t|T]} ))g ;;
+		P|p)
+			size_converter $(( 1024 * ${1%[p|P]} ))t ;;
+		*)
+			die "ERR > in \"size_converter\" Unknown unit" ;;
+	esac
+}
+
+size2humain_readable () {
+	_next_unit=$(( ${1%[k|K|m|M|g|G|t|T|p|P]} / 1024 ))
+	[[ ${_next_unit} -eq 0 ]] && {
+		echo ${1}
+		return 0
+	}
+	case "${1//[0-9]}" in
+		"")
+			size2humain_readable ${_next_unit}K ;;
+		k|K)
+			size2humain_readable ${_next_unit}M ;;
+		m|M)
+			size2humain_readable ${_next_unit}G ;;
+		g|G)
+			size2humain_readable ${_next_unit}T ;;
+		t|T)
+			size2humain_readable ${_next_unit}P ;;
+		p|P)
+			echo "${1}"
+			return 0 ;;
+		*)
+			die "ERR > in \"size2humain_readable\" Unknown unit" ;;
+	esac
+}
+
+# validate_partitions
+validate_partitions () {
+	declare -A mountpoints fstype
+	local _rest_size=$(size_converter ${SIZE})
+
+	echo "${FUNCNAME}: checking partitions schema"
+
+	for _line in "${_PARTITIONS[@]}" ; do
+		IFS=':' read -ra entry <<<"${_line}"
+		[[ -n "${_use_rest}" ]] && \
+			die "ERR > only the last partition can use the rest of disk"
+
+		entry[1]=$(echo "${entry[1]}" | sed -e 's/[[:blank:]]//g')
+		local _size=$(size_converter ${entry[1],,})
+
+#	Mounts points traitements
+		[[ ${entry[0],,} =~ ${REGEXP_SWAP} ]] && {
+			_mount_point=none
+			_nbre_slash=-1
+			entry[2]=swap
+			entry[4]=0
+			entry[5]=0
+		} || {
+			${WARN:=true} && [[ ${entry[0],,} =~ ${REGEXP_APPROXIMATIVE_SWAP} ]] && {
+				echo -e "\n>>> Warning: partition name \"${entry[0]}\" is proch of \"sw\" or \"swap\". Did you meen \"swap\" ? <<<\n If needed, press Ctrl+c to exit and modify your partitions definitions.\n"
+				sleep 10 
+			}
+
+			_mount_point="$(echo ${entry[0]%/} | sed -e 's/[[:blank:]]/ /g')"
+			_only_slash="${_mount_point//[^\/]}"
+			_nbre_slash=${#_only_slash}
+
+			[[ ${_nbre_slash:=0} -eq 0 ]] && {
+				[[ ${#_mount_point} -eq 0 ]] || _nbre_slash=1
+				_mount_point="/${_mount_point}"
+			}
+
+   		[[ ${_mount_point} == "/boot" ]] && \
+				_PARTBOOT=$(( ${#PARTSTABLE[*]} + 1 ))
+
+			[[ ${_mount_point} == "/" ]] && \
+				: ${_PARTBOOT:=$(( ${#PARTSTABLE[*]} + 1 ))}
+
+			${mountpoints["${_mount_point}"]:=false} && \
+				die "ERR > \"${_mount_point}\" already defined." || \
+				mountpoints["${_mount_point}"]=true
+		}
+
+#	Size traitements
+		[[ -z "${_size}" ]] && {
+			_use_rest=${#PARTSTABLE[*]}
+			${warn:=true} && [[ ${_rest_size} -le $(size_converter ${MINIMAL_SIZE}) ]] && {
+				echo -e "\n>>> Warning: Size of last partition is less than ${MINIMAL_SIZE} ($(size2humain_readable ${_rest_size})) ! <<<\n Press Ctrl+c to exit and modify your partitions definitions.\n"
+				sleep 10
+			}
+		} || {
+			(( _rest_size = _rest_size - _size ))
+
+			[[ ${_rest_size} -ge 0 ]] || \
+				die "ERR > Image size can't contain all partitions."
+		}
+
+#	4 Check requirements
+	entry[2]=${entry[2]//[[:blank:]]/}
+	[[ ${entry[2]} =~ ${REGEXP_SWAP} ]] && \
+			fstype["mkswap"]=true || \
+			fstype["mkfs.${entry[2]:=ext4}"]=true
+	
+		PARTSTABLE[${#PARTSTABLE[*]}]="$(( ${_nbre_slash} + 1 )):$(( ${#PARTSTABLE[*]} + 1)):${_mount_point}:${_size}:${entry[2]:=ext4}:${entry[3]:=defaults}:${entry[4]:=0}:${entry[5]:=1}:${entry[6]:=${_mount_point//[[:blank:]]}}"
+
+		unset _size entry _mount_point _only_slash _nbre_slash
+	done
+
+	[[ ! ${mountpoints["/"]} ]] && \
+		die "ERR > No \"/\" defined ! Bad partition schema."
+
+	unset mountpoints
+
+	[[ ${_PARTBOOT} -ge 4 ]] && _PARTBOOT=$(( _PARTBOOT + 1 ))
+	[[ ${#PARTSTABLE[@]} -ge 4 ]] && _LOGIC=true
+
+	for entry in "${PARTSTABLE[@]}" ; do
+		echo "${entry}"
+	done
+
+	IFS=$'\n' ORDER_TABLE=( $(for entry in $(seq 0 $((${#PARTSTABLE[@]} - 1))) ; do
+		echo "${PARTSTABLE[${entry}]}"
+	done | sort -t: -nk 1) )
+
+	NEEDED_COMMANDS=${!fstype[*]}
+	check_requirements	
+}
+
+# init environment
+init_env () {
+#	Search a config file	
+	for fic in ${_CONFIG_FILE} ; do
+		[[ -r "${fic}" ]] && {
+			echo "\"${fic}\" found and is readable : loading"
+			source ${fic}
+			break
+		}
+	done
+	: ${_NAME:=$(hostname -s)}
+	echo "virtual machine name : ${_NAME}"
+	: ${_FORMAT:=${CMD_FORMAT:=${FORMAT}}}
+	echo "type of image : ${_FORMAT}"
+	: ${_SIZE:=${SIZE}}
+	echo "size of vm : ${_SIZE}"
+	: ${_ARCH:=${CMD_ARCH:=${ARCH}}}
+	echo "architecture : ${_ARCH}"
+	: ${_VERSION:=${CMD_VERSION:=${VERSION}}}
+	echo "install debian ${_VERSION}"
+	: ${_SERVER:=${CMD_SERVER:=${SERVER}}}
+	[[ ! -z "${CMD_LISTPKG}" ]] && {
+		[[ -r ${CMD_LISTPKG} ]] && {
+			__content=$(sed '{s/[[:blank:]]//g;s/#.*$//g;s,//.*,,g;/^$/d;s/-$//}' ${CMD_LISTPKG} | sed ':a;N;$!ba;s/\n/ /g')
+			CMD_ADDPKG="${CMD_ADDPKG//,/ } ${__content}"
+		} || {
+			echo "list of package not readable. skip it."
+			CMD_LISTPKG=""
+		}
+	}
+	echo "use server ${_SERVER} to installation"
+	case ${_ARCH} in
+		amd64)	KARCH=${_ARCH} ;;
+		i386) 	KARCH="686" ;;
+		*)	die "ERR > Architecture unknown." ;;
+	esac
+	: ${_KERNEL:=${CMD_KERNEL:=${KERNEL}${KARCH}}}
+	echo "install kernel : ${_KERNEL}"
+	: ${_BOOTLOADER:=${CMD_BOOTLOADER:=${BOOTLOADER}}}
+	echo "boot loader : ${_BOOTLOADER}"
+	: ${_ROOTPWD:="${CMD_ROOTPWD:="${ROOTPWD:=""}"}"}
+	[[ ${#_PARTITIONS} -le 0 ]] && {
+		_PARTITIONS[${#_PARTITIONS}]="/"
+	}
+	validate_partitions
+	[[ -z "${CMD_ADDPKG}" ]] || \
+		CMD_ADDPKG="${CMD_ADDPKG//,/ }"
+	[[ -n "${_KERNEL}" ]] && \
+		CMD_ADDPKG="${_KERNEL} ${CMD_ADDPKG//,/ }"
+	[[ -n "${_BOOTLOADER}" ]] && \
+		CMD_ADDPKG="${_BOOTLOADER} ${CMD_ADDPKG//,/ }"
+
+	find_nbd
+	find_loop
+}
+
+secure_tmout () {
+	[ ${SECURE_TMOUT:=0} -gt 0 ] && {
+		echo "Add delay for old or slow computers (${SECURE_TMOUT} sec)"
+		sleep ${SECURE_TMOUT}
+	}
+}
+
+create_vm_hd () {
+	echo "${FUNCNAME}: create vm hard drive ${HD_IMG} (format ${_FORMAT})"
+	qemu-img create -f ${_FORMAT} "${HD_IMG}" ${_SIZE} || \
+		die "ERR > making ${HD_IMG} failed. Execution failed"
+	echo "${FUNCNAME}: hard drive created"
+	secure_tmout
+}
+
+hd2nbd () {
+	HD_FULL_PATH=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}")
+	echo "${FUNCNAME}: associate vm hd (${HD_FULL_PATH}) to nbd (${_NBD})"
+	qemu-nbd -c ${_NBD} "${HD_FULL_PATH}" || \
+		die "ERR > association ${_NBD} to ${HD_IMG} failed. Execution failed"
+	STEPS[${#STEPS[@]}]="free_nbd"
+	echo "${FUNCNAME}: association ok"
+	secure_tmout
+}
+
+free_nbd () {
+	echo "${FUNCNAME}: freeing nbd ${_NBD}"
+	qemu-nbd -d ${_NBD} || {
+		unset STEPS[${#STEPS[@]}-1]
+		Kill "ERR > ${_NBD} wont be free."
+	}
+	echo "${FUNCNAME}: Freeing nbd ${_NBD} ok"
+	secure_tmout
+}
+
+end_of_script () {
+	echo "" ;
+	die " *** Script stopped by user *** "
+}
+
+cleaning () {
+	while [ ${#STEPS[@]} -gt 0 ] ; do
+		echo "${FUNCNAME}: ${STEPS[${#STEPS[@]}-1]}"
+		${STEPS[${#STEPS[@]}-1]}
+		unset STEPS[${#STEPS[@]}-1]
+	done
+	echo "delete temporary mount point (if needed)"
+	[ -d "${_MOUNT_POINT}" ] && {
+		grep "${_MOUNT_POINT}" /proc/mounts && {
+			die "ERR > mount point \"${_MOUNT_POINT}\" still in use. Script cant erase it."
+		} || {
+			rm -rf "${_MOUNT_POINT}"
+		}
+	}
+}
+
+partitiondrive () {
+	echo "${FUNCNAME}: create partitions on ${_NBD} :"
+	_cmd=""
+	for _entry in ${PARTSTABLE[@]} ; do
+		IFS=':' read -ra _line <<<${_entry}
+		${_LOGIC} && [[ ${_line[1]} -eq 4 ]] && {
+			_cmd="${_cmd} mkpart extended ${_point:?ERR > Partitions errors} -1 "
+			(( _point = _point + 1 ))
+		}
+		[[ ${_line[4]} =~ ${REGEXP_SWAP} ]] && _line[4]=linux-swap || _line[4]=ext2
+		${_LOGIC} && [[ ${_line[1]} -ge 4 ]] && _parttype=logical
+#		Size in KiB so size in B is divized by 1024 :
+		[[ ${_line[3]:=-1} -gt 0 ]] && (( _endpoint = _point + _line[3]/1024 )) || _endpoint=-1
+		_cmd="${_cmd} mkpart ${_parttype:-primary} ${_line[4]} ${_point:-2048s} ${_endpoint}"
+		(( _point = ( _point + _line[3] / 1024 ) + 1 ))
+		[[ ${_PARTBOOT} -eq ${_line[1]} ]] && _cmd="${_cmd} set ${_PARTBOOT} boot on "
+	done
+	
+	echo "executing : parted -s -a none ${_NBD} mklabel msdos unit KiB -- ${_cmd} print"
+	parted -s -a none ${_NBD} mklabel msdos unit KiB -- ${_cmd} print || \
+		die "ERR > Partitioning ${_NBD} Failed !"
+}
+
+generatefstab () {
+	echo "${FUNCNAME}: generate fstab"
+	local _basedevice=/dev/sda
+	local _fstab=/fstab
+	echo "# <file system>	<dir>	<type>	<options>	<dump>	<pass>" | tee "${_MOUNT_POINT}${_fstab}"
+	for entry in ${ORDER_TABLE[@]} ; do
+		IFS=':' read -ra line <<<${entry}
+		[[ ${line[1]} -eq 4 ]] && echo -e "# ${_basedevice}${line[1]} : Extended" | tee -a "${_MOUNT_POINT}${_fstab}"
+		${_LOGIC:=false} && [[ ${line[1]} -ge 4 ]] && \
+			(( line[1] = line[1] + 1 ))
+		echo "# ${_basedevice}${line[1]}" | tee -a "${_MOUNT_POINT}${_fstab}"
+		echo -ne "$(blkid -s UUID /dev/mapper/$(basename ${_NBD})p${line[1]} | sed 's/.*\(UUID=\"[^"]*\"\).*/\1/g')\t" | tee -a "${_MOUNT_POINT}${_fstab}"
+		echo -e "${line[2]// /\\ }\t${line[4]}\t${line[5]}\t${line[6]}\t${line[7]}" | tee -a "${_MOUNT_POINT}${_fstab}"
+	done
+	echo "${FUNCNAME}: fstab has been generated"
+}
+
+detect_partitions () {
+	echo "${FUNCNAME}: detecting partitions"
+	kpartx -av ${_NBD} || \
+		die "ERR > partitions detection failed. Exit."
+	STEPS[${#STEPS[@]}]="free_part"
+	echo "${FUNCNAME}: partitions detected"
+	secure_tmout
+}
+
+free_part () {
+	echo "${FUNCNAME}: freeing partitions schema"
+	kpartx -dv ${_NBD} || {
+		Kill "ERR > partitions wont be free. Exit."
+	}
+	echo "${FUNCNAME}: cleaning partitions ok"
+	secure_tmout
+}
+
+create_filesystem () {
+	echo "${FUNCNAME}: create filesystems"
+	for _entry in ${PARTSTABLE[@]} ; do
+		IFS=':' read -ra _line <<<${_entry}
+		${_LOGIC} && [[ ${_line[1]} -ge 4 ]] && (( _line[1] =  _line[1] + 1 ))
+		[[ ${_line[4]} =~ ${REGEXP_SWAP} ]] && \
+			_cmd=mkswap || \
+			_cmd=mkfs.${_line[4]//[[:blank:]]/}
+		echo -e ".${_cmd} /dev/mapper/$(basename ${_NBD})p${_line[1]}"
+		${_cmd} /dev/mapper/$(basename ${_NBD})p${_line[1]} || \
+			die "ERR > partition ${_NBD}p${_line[1]} can't be formated. Exit."
+	done
+#	This waiting time is needed ...
+	sleep 1
+}
+
+create_tempdir () {
+	_MOUNT_POINT="$(mktemp -p "${_TMPDIR}" -d)"
+	[ -z "${_MOUNT_POINT}" ] && \
+		die "ERR > Mount point not create. Exit"
+	echo "${FUNCNAME}: mount point created : ${_MOUNT_POINT}"
+}
+
+mountfs () {
+	echo "${FUNCNAME}: mounting filesystems"
+ 	STEPS[${#STEPS[@]}]="umountfs"
+	for _entry in ${ORDER_TABLE[@]} ; do
+		IFS=':' read -ra _line <<<${_entry}
+		[[ ${_line[0]} -le 0 ]] && continue
+		${_LOGIC:=false} && [[ ${_line[1]} -ge 4 ]] && \
+			(( _line[1] = _line[1] + 1 ))
+		[[ ${_line[0]} -gt 1 ]] && {
+			echo "mkdir -p ${_MOUNT_POINT}/${_line[2]// /\\ }"
+			mkdir -p "${_MOUNT_POINT}/${_line[2]}" || \
+				die "ERR > Couldn't create directory"
+		}
+		[[ ${_line[1]} -eq ${_PARTBOOT} ]] && {
+			echo "assosiate boot partition to loop device"
+			losetup ${_LOOP} /dev/mapper/$(basename ${_NBD})p${_line[1]} || \
+				die "ERR > associate first partition to loop device failed. Exit."
+			_device=${_LOOP}
+		}
+		echo "mount ${_device:=/dev/mapper/$(basename ${_NBD})p${_line[1]}} ${_MOUNT_POINT}${_line[2]// /\\ }"
+		mount "${_device:=/dev/mapper/$(basename ${_NBD})p${_line[1]}}" "${_MOUNT_POINT}${_line[2]}" && \
+			MONTEDPARTS[${#MONTEDPARTS[*]}]="${_device:=/dev/mapper/$(basename ${_NBD})p${_line[1]}}" || \
+			die "ERR > Failed to mount ${_device:=/dev/mapper/$(basename ${_NBD})p${_line[1]}} in \"${_MOUNT_POINT}\". Exit."
+		unset _device
+	done
+ 	echo "${FUNCNAME}: filesystems monted"
+}
+
+umountfs () {
+		echo "${FUNCNAME}: umounting filesystems"
+		for _nbr in $(seq $(( ${#MONTEDPARTS[@]} -1)) -1 0) ; do
+			echo "umount \"${MONTEDPARTS[${_nbr}]}\""
+			umount ${MONTEDPARTS[${_nbr}]} || \
+				Kill "ERR > partition \"${MONTEDPARTS[${_nbr}]}\" still monted. Hard exit !"
+			[[ "${MONTEDPARTS[${_nbr}]}" == "${_LOOP}" ]] && {
+				echo "freeing loop device"
+				losetup -d "${_LOOP}" || \
+					Kill "ERR > Freeing loop device failed. Exit."
+				echo "freeing loop ok"
+				secure_tmout
+			}
+		done
+		echo "${FUNCNAME}: filesystems unmounted"
+}
+
+install_sys () {
+	echo "debootstrap --arch=${_ARCH} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER}"
+	debootstrap --arch=${_ARCH} --variant=minbase "${_VERSION}" "${_MOUNT_POINT}" "${_SERVER}" || {
+		die "ERR > installation failed. Exit."
+	}
+}
+
+install_pkgs () {
+	[[ -z "${CMD_ADDPKG// /}" ]] && return 0
+	echo "Installing package \"${CMD_ADDPKG% }\""
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
+source /etc/profile
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install ${APT_OPTS} -y ${CMD_ADDPKG//,/ }
+__EOF__
+}
+
+mount_fs_dev () {
+	echo "mounting dev"
+	mount -o bind /dev/ "${_MOUNT_POINT}"/dev/ || {
+		die "ERR > failed to mount /dev in chroot"
+	}
+	STEPS[${#STEPS[@]}]="umount_fs_dev"
+	echo "dev mounted"
+}
+
+umount_fs_dev () {
+	umount -l "${_MOUNT_POINT}"/dev/ || {
+		unset steps[${#steps[@]}-1]
+		kill "ERR > failed to umount /dev in chroot"
+	}
+	echo "dev unmounted"
+}
+
+mount_fs_proc () {
+	echo "mounting proc"
+	mount -t proc proc "${_MOUNT_POINT}"/proc/ || \
+		die "ERR > failed to mount /proc in chroot"
+	STEPS[${#STEPS[@]}]="umount_fs_proc"
+	echo "proc mounted"
+}
+
+umount_fs_proc () {
+	umount -l "${_MOUNT_POINT}"/proc/ || {
+		unset steps[${#steps[@]}-1]
+		kill "ERR > failed to umount /proc in chroot"
+	}
+	echo "proc unmounted"
+}
+
+install_grub () {
+	echo "chroot ${_MOUNT_POINT} /usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules='ext2 part_msdos' ${_NBD}"
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
+source /etc/profile
+/usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules="ext2 part_msdos" ${_NBD}
+__EOF__
+	[[ $? -gt 0 ]] && \
+		die "ERR > Installation of grub failed. Exit."
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
+source /etc/profile
+grub-mkconfig | grep -v ^[[:blank:]]loopback.* | grep -v "^[[:blank:]]set\ root=.*" > /boot/grub/grub.cfg
+__EOF__
+	[[ $? -gt 0 ]] && {
+		echo ">>> Warning: Update grub2 failed ! <<<" >&2
+	}
+}
+
+set_passwd_to () {
+	[[ -z "${1}" ]] && {
+		echo "Nothing to do. Skip password setting."
+		return 0
+	}
+	USER_TARGET=${1}
+	[[ -z "${2}" ]] && {
+		enable_output
+		echo "Set password to ${USER_TARGET} > "
+		chroot "${_MOUNT_POINT}" /usr/bin/passwd "${USER_TARGET}"
+		init_out
+		return 0
+	}
+	shift
+	PASSWD="${@}"
+	chroot "${_MOUNT_POINT}" /usr/bin/passwd "${USER_TARGET}" <<EOF
+${PASSWD}
+${PASSWD}
+EOF
+}
+
+clean_install () {
+	chroot "${_MOUNT_POINT}" /usr/bin/apt-get clean
+}
+
+set_machine_name () {
+	echo ${_NAME} > "${_MOUNT_POINT}"/etc/hostname
+}
+
+run_ch () {
+	CH="chroot ${MOUNT_POINT} /bin/bash"
+	$CH <<[*_EOF_*]
+source /etc/profile
+$(cat ${1})
+[*_EOF_*]
+}
+
+excute_third_part () {
+	echo "Keep current location for bad scripters ..."
+	__current_location="${PWD}"
+
+	[[ ! -z "${CMD_THIRD}" ]] && {
+		MOUNT_POINT="${_MOUNT_POINT}"
+		CH="chroot ${MOUNT_POINT} /bin/bash"
+
+		[[ -d "${CMD_THIRD}" ]] && {
+			for _file in $(find "${CMD_THIRD}" \( -type f -o -type l \) \
+				-a -regex "${CMD_THIRD}/[0-9]+.*" | sort) ; do
+				echo ${_file} | grep -P "[0-9]{2}\.chroot.*" && {
+					echo "Running ${_file} in chroot environment"
+					run_ch "${_file}"
+				}
+				echo ${_file} | grep -P "[0-9]{2}\.host.*" && {
+					echo "Running ${_file} on host"
+					source ${_file}
+					cd "${__current_location}"
+				}
+			done
+		}
+		[[ -f "${CMD_THIRD}" ]] && {
+			[[ -r "${CMD_THIRD}" ]] && {
+				. "${CMD_THIRD}"
+			} || {
+				echo "Third party unreadable. Ignored."
+			}
+		}
+	}
+	cd "${__current_location}"
+}
+
+execute_post_install () {
+	[ ! -z "${CMD_THIRD}" ] && {
+		[ -d "${CMD_THIRD}" ] && {
+			for _file in $(find "${CMD_THIRD}" \( -type f -o -type l \) \
+				-a -regex "${CMD_THIRD}/[0-9]+.*" | sort) ; do
+				echo ${_file} | grep -P "[0-9]{2}\.post.*" && {
+					echo "Running ${_file} after all"
+					source ${_file}
+				}
+			done
+		}
+	}
+}
+
+interactive_seq () {
+	enable_output
+	echo -ne "\n\n*** ENTERING IN INTERACTIVE SHELL ***\n\n"
+	echo "You are here : ${PWD}"
+	echo "Virtual machine is monted here : ${_MOUNT_POINT}"
+	echo "Press \"Ctrl+d\" or \"exit\" to exit"
+	echo -ne "\n\n"
+	/bin/bash --noprofile --norc
+	echo -ne "\n\n*** END OF INTERACTIVE SEQUENCE ***\n\n"
+	init_out
+}
+
+step_by_step () {
+ 	${_THIRD_ONLY} || create_vm_hd
+	hd2nbd
+ 	${_THIRD_ONLY} || partitiondrive
+ 	detect_partitions
+ 	${_THIRD_ONLY} || create_filesystem
+ 	create_tempdir
+	mountfs
+# 	${_THIRD_ONLY} || install_sys
+ 	${_THIRD_ONLY} || generatefstab
+# 	${_THIRD_ONLY} || install_pkgs 
+# 	mount_fs_dev
+# 	mount_fs_proc
+# 	${_THIRD_ONLY} || case ${_BOOTLOADER} in
+# 		grub2)
+# 			install_grub ;;
+# 		*)
+# 			echo -e "\n\n*** Boot loader unknown ! Install it interactively ***\n\n"
+# 			sleep 2
+# 			_INTERACTIVE_SEQUENCE=true
+# 			;;
+# 	esac
+# 	${_THIRD_ONLY} || set_machine_name
+# 	${_THIRD_ONLY} || set_passwd_to root "${_ROOTPWD}"
+# 	${_THIRD_ONLY} || clean_install
+# 	excute_third_part
+ 	${_INTERACTIVE_SEQUENCE} && interactive_seq
+ 	cleaning
+ 	execute_post_install
+}
+
+# main part
+# Partitionnement in developpement option -P
+while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
+	case ${opt} in
+		h)
+			usage 0 ;;
+		a)
+			CMD_ARCH=${OPTARG} ;;
+		A)
+			CMD_ADDPKG=${OPTARG} ;;
+		b)
+			CMD_BOOTLOADER=${OPTARG} ;;
+		c)
+			_CONFIG_FILE=${OPTARG} ;;
+		D)
+			_DEBUG=true ;;
+		f)
+			CMD_FORMAT=${OPTARG} ;;
+		i)
+			_INTERACTIVE_SEQUENCE=true ;;
+		k)
+			CMD_KERNEL=${OPTARG} ;;
+		l)
+			CMD_LISTPKG=${OPTARG} ;;
+		o)
+			echo "${OPTARG}" | grep [[:blank:]] > /dev/null && {
+				echo -e "> No space authorized in name of alternative temp dir (option \"-o\").\n"
+				usage
+			}
+			[ -d "${OPTARG}" -a -w "${OPTARG}" ] && {
+				_TMPDIR="${OPTARG%/}"
+			} || {
+				echo ">>> Warning: ${OPTARG} not a directory or not writable. Option ignored <<<"
+			} ;;
+		p)
+			CMD_ROOTPWD="${OPTARG}" ;;
+		P)
+			[[ -f "${OPTARG}" ]] && {
+				while read -r _line ; do
+					_PARTITIONS[${#_PARTITIONS[@]}]="${_line}"
+				done <<< "$(sed -e '{s/^[[:blank:]]*//g;s/[[:blank:]]*$//g;s/#.*$//g;s,//.*,,g;/^$/d;s/-$//;}' ${OPTARG})"
+			} || {
+				_PARTITIONS[${#_PARTITIONS[@]}]="${OPTARG}"
+			} ;;
+		s)
+			SIZE=${OPTARG} ;;
+		S)
+			CMD_SERVER=${OPTARG} ;;
+		t)
+			CMD_THIRD=${OPTARG%/} ;;
+		T)
+			_THIRD_ONLY=true ;;
+		n)
+			_NAME="${OPTARG,,}" ;;
+		v)
+			_VERBOSE=true ;;
+		V)
+			CMD_VERSION=${OPTARG} ;;
+		:)
+			echo -e "> Option -$OPTARG requiert un argument.\n"
+			usage ;;
+		*)
+			echo -e "> Invalide option \"-$OPTARG\".\n"
+			usage ;;
+	esac
+done
+
+shift $((OPTIND-1))
+case $# in
+	0)
+		usage 0 ;;
+	1)
+		HD_IMG="${1}" ;;
+	*)
+		echo -e "> Bad number of arguments\n\t${0} <hard drive image>\n"
+		usage ;;
+esac
+
+are_you_root
+init_out
+check_requirements
+init_env
+step_by_step
+
