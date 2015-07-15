@@ -26,7 +26,7 @@ trap end_of_script SIGINT SIGTERM SIGQUIT
 
 NEEDED_COMMANDS="qemu-img qemu-nbd parted sync kpartx losetup mktemp mount source \
 debootstrap cat chroot umount modprobe cat source mkswap basename readlink dirname \
-blkid"
+blkid tee"
 
 _SCRIPT_NAME=$(basename $0)
 _CONFIG_FILE="${HOME}/.${_SCRIPT_NAME}.conf /etc/${_SCRIPT_NAME}.conf"
@@ -386,7 +386,7 @@ init_env () {
 	echo "use server ${_SERVER} to installation"
 	case ${_ARCH} in
 		amd64)	KARCH=${_ARCH} ;;
-		i386) 	KARCH="686" ;;
+		i386) 	KARCH="686-pae" ;;
 		*)	die "ERR > Architecture unknown." ;;
 	esac
 	: ${_KERNEL:=${CMD_KERNEL:=${KERNEL}${KARCH}}}
@@ -491,7 +491,7 @@ partitiondrive () {
 generatefstab () {
 	echo "${FUNCNAME}: generate fstab"
 	local _basedevice=/dev/sda
-	local _fstab=/fstab
+	local _fstab=/etc/fstab
 	echo "# <file system>	<dir>	<type>	<options>	<dump>	<pass>" | tee "${_MOUNT_POINT}${_fstab}"
 	for entry in ${ORDER_TABLE[@]} ; do
 		IFS=':' read -ra line <<<${entry}
@@ -763,24 +763,24 @@ step_by_step () {
  	${_THIRD_ONLY} || create_filesystem
  	create_tempdir
 	mountfs
-# 	${_THIRD_ONLY} || install_sys
+ 	${_THIRD_ONLY} || install_sys
  	${_THIRD_ONLY} || generatefstab
-# 	${_THIRD_ONLY} || install_pkgs 
-# 	mount_fs_dev
-# 	mount_fs_proc
-# 	${_THIRD_ONLY} || case ${_BOOTLOADER} in
-# 		grub2)
-# 			install_grub ;;
-# 		*)
-# 			echo -e "\n\n*** Boot loader unknown ! Install it interactively ***\n\n"
-# 			sleep 2
-# 			_INTERACTIVE_SEQUENCE=true
-# 			;;
-# 	esac
-# 	${_THIRD_ONLY} || set_machine_name
-# 	${_THIRD_ONLY} || set_passwd_to root "${_ROOTPWD}"
-# 	${_THIRD_ONLY} || clean_install
-# 	excute_third_part
+ 	${_THIRD_ONLY} || install_pkgs 
+ 	mount_fs_dev
+ 	mount_fs_proc
+ 	${_THIRD_ONLY} || case ${_BOOTLOADER} in
+ 		grub2)
+ 			install_grub ;;
+ 		*)
+ 			echo -e "\n\n*** Boot loader unknown ! Install it interactively ***\n\n"
+ 			sleep 2
+ 			_INTERACTIVE_SEQUENCE=true
+ 			;;
+ 	esac
+ 	${_THIRD_ONLY} || set_machine_name
+ 	${_THIRD_ONLY} || set_passwd_to root "${_ROOTPWD}"
+ 	${_THIRD_ONLY} || clean_install
+ 	excute_third_part
  	${_INTERACTIVE_SEQUENCE} && interactive_seq
  	cleaning
  	execute_post_install
