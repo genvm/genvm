@@ -239,7 +239,7 @@ init_env () {
 	echo "use server ${_SERVER} to installation"
 	case ${_ARCH} in
 		amd64)	KARCH=${_ARCH} ;;
-		i386) 	KARCH="686" ;;
+		i386) 	KARCH="686-pae" ;;
 		*)	die "ERR > Architecture unknown." ;;
 	esac
 	: ${_KERNEL:=${CMD_KERNEL:=${KERNEL}${KARCH}}}
