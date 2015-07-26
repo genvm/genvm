@@ -1,11 +1,12 @@
 #!/bin/bash
 
 #
-#    Contact            : FHH <fhh@e-galaxie.org>
-#    Web                : https://sourceforge.net/projects/genvm
-#    Description        : "genvm" Is a powerfull script bash to generate 
-#	a minimal and complete virtual machine for KVM/QEMU, VirtualBox 
-#	and/or VMWare.
+#    Contact            : FHH <fhh@genvm.eu>
+#    Web                : http://www.genvm.eu
+#    Sources            : https://github.com/genvm
+#    Description        : "genvm" Is a powerfull script bash to generate
+#   a minimal and complete Debian virtual machine for KVM/QEMU  (so usable
+#   in ProxMox, libvirtd, ...), VirtualBox and/or VMWare.
 #    Licence            : GPL3
 #
 #    This program is free software: you can redistribute it and/or modify
