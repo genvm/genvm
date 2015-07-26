@@ -54,8 +54,9 @@ declare -a STEPS PARTSTABLE ORDER_TABLE MONTEDPARTS
 
 REGEXP_SWAP='^sw(ap)?$'
 REGEXP_APPROXIMATIVE_SWAP='.*sw(ap)?.*'
-# WARN=false
 _LOGIC=false
+
+: ${WARN=true} # Warning activate by default
 
 # Display help message :
 usage () {
