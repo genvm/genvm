@@ -99,13 +99,16 @@ the script run :
 All script with "chroot" is executed in chroot environement, all with "post" are run after
 image umount. "host" Run in host who generate environnement.
 
-Script to run after installation can use some function and vaiables.
-All lines begin by \$CH is run in new environnement.
+Script to run after installation can use some function and variables like \${MOUNT_POINT} (root
+of generate systeme) or \"set_passwd_to foo bar\".
+
 Exemple :
 
-	\$CH adduser foo
-	set_passwd_to foo bar
-	wget http://my.site/archive.zip -O \${MOUNT_POINT}/archive.zip
+	> chroot \${MOUNT_POINT} /bin/bash <<_eoc_
+	> adduser foo
+	> _eoc_
+	> set_passwd_to foo bar
+	> wget http://my.site/archive.zip -O \${MOUNT_POINT}/archive.zip
 
 run "adduser" in new environnement, set foo password to bar and download http://my.site/archive.zip 
 from host and paste it in the new environement. 
@@ -417,30 +420,30 @@ secure_tmout () {
 }
 
 create_vm_hd () {
-	echo "${FUNCNAME}: create vm hard drive ${HD_IMG} (format ${_FORMAT})"
+	echo "create vm hard drive ${HD_IMG} (format ${_FORMAT})"
 	qemu-img create -f ${_FORMAT} "${HD_IMG}" ${_SIZE} || \
 		die "ERR > making ${HD_IMG} failed. Execution failed"
-	echo "${FUNCNAME}: hard drive created"
+	echo "hard drive created"
 	secure_tmout
 }
 
 hd2nbd () {
 	HD_FULL_PATH=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}")
-	echo "${FUNCNAME}: associate vm hd (${HD_FULL_PATH}) to nbd (${_NBD})"
+	echo "associate vm hd (${HD_FULL_PATH}) to nbd (${_NBD})"
 	qemu-nbd -c ${_NBD} "${HD_FULL_PATH}" || \
 		die "ERR > association ${_NBD} to ${HD_IMG} failed. Execution failed"
 	STEPS[${#STEPS[@]}]="free_nbd"
-	echo "${FUNCNAME}: association ok"
+	echo "association ok"
 	secure_tmout
 }
 
 free_nbd () {
-	echo "${FUNCNAME}: freeing nbd ${_NBD}"
+	echo "freeing nbd ${_NBD}"
 	qemu-nbd -d ${_NBD} || {
 		unset STEPS[${#STEPS[@]}-1]
 		Kill "ERR > ${_NBD} wont be free."
 	}
-	echo "${FUNCNAME}: Freeing nbd ${_NBD} ok"
+	echo "Freeing nbd ${_NBD} ok"
 	secure_tmout
 }
 
@@ -543,7 +546,7 @@ create_tempdir () {
 	_MOUNT_POINT="$(mktemp -p "${_TMPDIR}" -d)"
 	[ -z "${_MOUNT_POINT}" ] && \
 		die "ERR > Mount point not create. Exit"
-	echo "${FUNCNAME}: mount point created : ${_MOUNT_POINT}"
+	echo "mount point created : ${_MOUNT_POINT}"
 }
 
 mountfs () {
@@ -605,41 +608,45 @@ install_pkgs () {
 source /etc/profile
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
+echo -e '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
+chmod u+x /usr/sbin/policy-rc.d
 apt-get install ${APT_OPTS} -y ${CMD_ADDPKG//,/ }
 __EOF__
 }
 
 mount_fs_dev () {
-	echo "mounting dev"
+	echo "${FUNCNAME}: mounting dev"
 	mount -o bind /dev/ "${_MOUNT_POINT}"/dev/ || {
 		die "ERR > failed to mount /dev in chroot"
 	}
 	STEPS[${#STEPS[@]}]="umount_fs_dev"
-	echo "dev mounted"
+	echo "${FUNCNAME}: dev mounted"
 }
 
 umount_fs_dev () {
+	echo "${FUNCNAME}: unmounting dev"
 	umount -l "${_MOUNT_POINT}"/dev/ || {
 		unset steps[${#steps[@]}-1]
 		kill "ERR > failed to umount /dev in chroot"
 	}
-	echo "dev unmounted"
+	echo "${FUNCNAME}: dev unmounted"
 }
 
 mount_fs_proc () {
-	echo "mounting proc"
+	echo "${FUNCNAME}: mounting proc"
 	mount -t proc proc "${_MOUNT_POINT}"/proc/ || \
 		die "ERR > failed to mount /proc in chroot"
 	STEPS[${#STEPS[@]}]="umount_fs_proc"
-	echo "proc mounted"
+	echo "${FUNCNAME}: proc mounted"
 }
 
 umount_fs_proc () {
+	echo "${FUNCNAME}: unmounting proc"
 	umount -l "${_MOUNT_POINT}"/proc/ || {
 		unset steps[${#steps[@]}-1]
 		kill "ERR > failed to umount /proc in chroot"
 	}
-	echo "proc unmounted"
+	echo "${FUNCNAME}: proc unmounted"
 }
 
 install_grub () {
@@ -681,7 +688,11 @@ EOF
 }
 
 clean_install () {
-	chroot "${_MOUNT_POINT}" /usr/bin/apt-get clean
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
+source /etc/profile
+/usr/bin/apt-get clean
+/usr/sbin/policy-rc.d 
+__EOF__
 }
 
 set_machine_name () {
@@ -689,8 +700,7 @@ set_machine_name () {
 }
 
 run_ch () {
-	CH="chroot ${MOUNT_POINT} /bin/bash"
-	$CH <<[*_EOF_*]
+	chroot ${MOUNT_POINT} /bin/bash <<[*_EOF_*]
 source /etc/profile
 $(cat ${1})
 [*_EOF_*]
@@ -702,8 +712,6 @@ excute_third_part () {
 
 	[[ ! -z "${CMD_THIRD}" ]] && {
 		MOUNT_POINT="${_MOUNT_POINT}"
-		CH="chroot ${MOUNT_POINT} /bin/bash"
-
 		[[ -d "${CMD_THIRD}" ]] && {
 			for _file in $(find "${CMD_THIRD}" \( -type f -o -type l \) \
 				-a -regex "${CMD_THIRD}/[0-9]+.*" | sort) ; do
@@ -758,32 +766,32 @@ interactive_seq () {
 step_by_step () {
  	${_THIRD_ONLY} || create_vm_hd
 	hd2nbd
- 	${_THIRD_ONLY} || partitiondrive
- 	detect_partitions
- 	${_THIRD_ONLY} || create_filesystem
- 	create_tempdir
+	${_THIRD_ONLY} || partitiondrive
+	detect_partitions
+	${_THIRD_ONLY} || create_filesystem
+	create_tempdir
 	mountfs
- 	${_THIRD_ONLY} || install_sys
- 	${_THIRD_ONLY} || generatefstab
- 	${_THIRD_ONLY} || install_pkgs 
- 	mount_fs_dev
- 	mount_fs_proc
- 	${_THIRD_ONLY} || case ${_BOOTLOADER} in
- 		grub2)
- 			install_grub ;;
- 		*)
- 			echo -e "\n\n*** Boot loader unknown ! Install it interactively ***\n\n"
- 			sleep 2
- 			_INTERACTIVE_SEQUENCE=true
- 			;;
- 	esac
- 	${_THIRD_ONLY} || set_machine_name
- 	${_THIRD_ONLY} || set_passwd_to root "${_ROOTPWD}"
- 	${_THIRD_ONLY} || clean_install
- 	excute_third_part
- 	${_INTERACTIVE_SEQUENCE} && interactive_seq
- 	cleaning
- 	execute_post_install
+	${_THIRD_ONLY} || install_sys
+	${_THIRD_ONLY} || generatefstab
+	${_THIRD_ONLY} || install_pkgs 
+	mount_fs_dev
+	mount_fs_proc
+	${_THIRD_ONLY} || case ${_BOOTLOADER} in
+		grub2)
+			install_grub ;;
+		*)
+			echo -e "\n\n*** Boot loader unknown ! Install interactively ***\n\n"
+			sleep 2
+			_INTERACTIVE_SEQUENCE=true
+			;;
+	esac
+	${_THIRD_ONLY} || set_machine_name
+	${_THIRD_ONLY} || set_passwd_to root "${_ROOTPWD}"
+	${_THIRD_ONLY} || clean_install
+	excute_third_part
+	${_INTERACTIVE_SEQUENCE} && interactive_seq
+	cleaning
+	execute_post_install
 }
 
 # main part
