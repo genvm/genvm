@@ -91,13 +91,16 @@ the script run :
 All script with "chroot" is executed in chroot environement, all with "post" are run after
 image umount. "host" Run in host who generate environnement.
 
-Script to run after installation can use some function and vaiables.
-All lines begin by \$CH is run in new environnement.
+Script to run after installation can use some function and variables like \${MOUNT_POINT} (root
+of generate systeme) or \"set_passwd_to foo bar\".
+
 Exemple :
 
-	\$CH adduser foo
-	set_passwd_to foo bar
-	wget http://my.site/archive.zip -O \${MOUNT_POINT}/archive.zip
+	> chroot \${MOUNT_POINT} /bin/bash <<_eoc_
+	> adduser foo
+	> _eoc_
+	> set_passwd_to foo bar
+	> wget http://my.site/archive.zip -O \${MOUNT_POINT}/archive.zip
 
 run "adduser" in new environnement, set foo password to bar and download http://my.site/archive.zip 
 from host and paste it in the new environement. 
@@ -501,8 +504,7 @@ set_machine_name () {
 }
 
 run_ch () {
-	CH="chroot ${MOUNT_POINT} /bin/bash"
-	$CH <<[*_EOF_*]
+	chroot ${MOUNT_POINT} /bin/bash <<[*_EOF_*]
 source /etc/profile
 $(cat ${1})
 [*_EOF_*]
@@ -514,8 +516,6 @@ excute_third_part () {
 
 	[[ ! -z "${CMD_THIRD}" ]] && {
 		MOUNT_POINT="${_MOUNT_POINT}"
-		CH="chroot ${MOUNT_POINT} /bin/bash"
-
 		[[ -d "${CMD_THIRD}" ]] && {
 			for _file in $(find "${CMD_THIRD}" \( -type f -o -type l \) \
 				-a -regex "${CMD_THIRD}/[0-9]+.*" | sort) ; do
