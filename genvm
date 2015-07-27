@@ -702,7 +702,7 @@ clean_install () {
 	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
 source /etc/profile
 /usr/bin/apt-get clean
-/usr/sbin/policy-rc.d 
+[[ -e /usr/sbin/policy-rc.d ]] && rm /usr/sbin/policy-rc.d
 __EOF__
 }
 
