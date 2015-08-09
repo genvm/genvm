@@ -305,7 +305,7 @@ validate_partitions () {
 				_mount_point="/${_mount_point}"
 			}
 
-   		[[ ${_mount_point} == "/boot" ]] && \
+			[[ ${_mount_point} == "/boot" ]] && \
 				_PARTBOOT=$(( ${#PARTSTABLE[*]} + 1 ))
 
 			[[ ${_mount_point} == "/" ]] && \
@@ -375,8 +375,8 @@ init_env () {
 			break
 		}
 	done
-	: ${_NAME:=$(hostname -s)}
-	echo "virtual machine name : ${_NAME}"
+	: ${NAME:=$(hostname -s)}
+	echo "virtual machine name : ${NAME}"
 	: ${_FORMAT:=${CMD_FORMAT:=${FORMAT}}}
 	echo "type of image : ${_FORMAT}"
 	: ${_SIZE:=${SIZE}}
@@ -707,7 +707,7 @@ __EOF__
 }
 
 set_machine_name () {
-	echo ${_NAME} > "${_MOUNT_POINT}"/etc/hostname
+	echo ${NAME} > "${_MOUNT_POINT}"/etc/hostname
 }
 
 run_ch () {
@@ -860,7 +860,7 @@ while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
 		T)
 			_THIRD_ONLY=true ;;
 		n)
-			_NAME="${OPTARG,,}" ;;
+			NAME="${OPTARG,,}" ;;
 		v)
 			_VERBOSE=true ;;
 		V)
