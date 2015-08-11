@@ -377,6 +377,7 @@ init_env () {
 			break
 		}
 	done
+	HD_IMG=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}")
 	: ${NAME:=$(hostname -s)}
 	echo "virtual machine name : ${NAME}"
 	: ${_FORMAT:=${CMD_FORMAT:=${FORMAT}}}
@@ -439,9 +440,8 @@ create_vm_hd () {
 }
 
 hd2nbd () {
-	HD_FULL_PATH=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}")
-	echo "associate vm hd (${HD_FULL_PATH}) to nbd (${_NBD})"
-	qemu-nbd -c ${_NBD} "${HD_FULL_PATH}" || \
+	echo "associate vm hd (${HD_IMG}) to nbd (${_NBD})"
+	qemu-nbd -c ${_NBD} "${HD_IMG}" || \
 		die "ERR (${FUNCNAME:-Unknown}) > association ${_NBD} to ${HD_IMG} failed. Execution failed"
 	STEPS[${#STEPS[@]}]="free_nbd"
 	echo "association ok"
