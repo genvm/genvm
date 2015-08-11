@@ -308,8 +308,10 @@ validate_partitions () {
 			[[ ${_mount_point} == "/boot" ]] && \
 				_PARTBOOT=$(( ${#PARTSTABLE[*]} + 1 ))
 
-			[[ ${_mount_point} == "/" ]] && \
+			[[ ${_mount_point} == "/" ]] && {
+				: ${entry[5]:=1}
 				: ${_PARTBOOT:=$(( ${#PARTSTABLE[*]} + 1 ))}
+			}
 
 			${mountpoints["${_mount_point}"]:=false} && \
 				die "ERR (${FUNCNAME:-Unknown}) > \"${_mount_point}\" already defined." || \
@@ -340,7 +342,7 @@ validate_partitions () {
 			fstype["mkswap"]=true || \
 			fstype["mkfs.${entry[2]:=ext4}"]=true
 	
-		PARTSTABLE[${#PARTSTABLE[*]}]="$(( ${_nbre_slash} + 1 )):$(( ${#PARTSTABLE[*]} + 1)):${_mount_point}:${_size}:${entry[2]:=ext4}:${entry[3]:=defaults}:${entry[4]:=0}:${entry[5]:=1}:${entry[6]:=${_mount_point//[[:blank:]]}}"
+		PARTSTABLE[${#PARTSTABLE[*]}]="$(( ${_nbre_slash} + 1 )):$(( ${#PARTSTABLE[*]} + 1)):${_mount_point}:${_size}:${entry[2]:=ext4}:${entry[3]:=defaults}:${entry[4]:=0}:${entry[5]:=2}:${entry[6]:=${_mount_point//[[:blank:]]}}"
 
 		unset _size entry _mount_point _only_slash _nbre_slash
 	done
