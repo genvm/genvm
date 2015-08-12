@@ -214,7 +214,7 @@ init_out () {
 #	Select debug mode
 	${_DEBUG} && {
 		set -x
-		VERBOSE=true
+		_VERBOSE=true
 	}
 #	Select verbose mode
 	${_VERBOSE} || { disable_output ; }
