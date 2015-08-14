@@ -103,9 +103,9 @@ All script with "chroot" is executed in chroot environement, all with "post" are
 image umount. "host" Run in host who generate environnement.
 
 Script to run after installation can use some function and variables like \${MOUNT_POINT} (root
-of generate systeme) or \"set_passwd_to foo bar\".
+of generate systeme) or "set_passwd_to foo bar".
 
-Exemple :
+Example :
 
 	> chroot \${MOUNT_POINT} /bin/bash <<_eoc_
 	> adduser foo
