@@ -768,7 +768,7 @@ interactive_seq () {
 	enable_output
 	echo -ne "\n\n*** ENTERING IN INTERACTIVE SHELL ***\n\n"
 	echo "You are here : ${PWD}"
-	echo "Virtual machine is monted here : ${_MOUNT_POINT}"
+	echo "Virtual machine is mounted here : ${_MOUNT_POINT}"
 	echo "Press \"Ctrl+d\" or \"exit\" to exit"
 	echo -ne "\n\n"
 	/bin/bash --noprofile --norc
