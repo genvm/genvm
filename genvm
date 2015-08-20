@@ -613,7 +613,7 @@ install_sys () {
 }
 
 install_pkgs () {
-	[[ -z "${CMD_ADDPKG// /}" ]] && return 0
+	[[ -z "${CMD_ADDPKG//[[:blank:]]/}" ]] && return 0
 	echo "Installing package \"${CMD_ADDPKG% }\""
 	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
 source /etc/profile
