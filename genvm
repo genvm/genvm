@@ -483,7 +483,7 @@ partitiondrive () {
 	echo "${FUNCNAME:-Unknown}: create partitions on ${_NBD} :"
 	_cmd=""
 	for _entry in ${PARTSTABLE[@]} ; do
-		IFS=':' read -ra _line <<<${_entry}
+		IFS=':' read -ra _line <<<"${_entry}"
 		${_LOGIC} && [[ ${_line[1]} -eq 4 ]] && {
 			_cmd="${_cmd} mkpart extended ${_point:?ERR (${FUNCNAME:-Unknown}) > Partitions errors} -1 "
 			(( _point = _point + 1 ))
@@ -508,7 +508,7 @@ generatefstab () {
 	local _fstab=/etc/fstab
 	echo "# <file system>	<dir>	<type>	<options>	<dump>	<pass>" | tee "${_MOUNT_POINT}${_fstab}"
 	for entry in ${ORDER_TABLE[@]} ; do
-		IFS=':' read -ra line <<<${entry}
+		IFS=':' read -ra line <<<"${entry}"
 		[[ ${line[1]} -eq 4 ]] && echo -e "# ${_basedevice}${line[1]} : Extended" | tee -a "${_MOUNT_POINT}${_fstab}"
 		${_LOGIC:=false} && [[ ${line[1]} -ge 4 ]] && \
 			(( line[1] = line[1] + 1 ))
@@ -540,7 +540,7 @@ free_part () {
 create_filesystem () {
 	echo "${FUNCNAME:-Unknown}: create filesystems"
 	for _entry in ${PARTSTABLE[@]} ; do
-		IFS=':' read -ra _line <<<${_entry}
+		IFS=':' read -ra _line <<<"${_entry}"
 		${_LOGIC} && [[ ${_line[1]} -ge 4 ]] && (( _line[1] =  _line[1] + 1 ))
 		[[ ${_line[4]} =~ ${REGEXP_SWAP} ]] && \
 			_cmd=mkswap || \
@@ -564,7 +564,7 @@ mountfs () {
 	echo "${FUNCNAME:-Unknown}: mounting filesystems"
  	STEPS[${#STEPS[@]}]="umountfs"
 	for _entry in ${ORDER_TABLE[@]} ; do
-		IFS=':' read -ra _line <<<${_entry}
+		IFS=':' read -ra _line <<<"${_entry}"
 		[[ ${_line[0]} -le 0 ]] && continue
 		${_LOGIC:=false} && [[ ${_line[1]} -ge 4 ]] && \
 			(( _line[1] = _line[1] + 1 ))
