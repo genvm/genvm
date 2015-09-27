@@ -420,6 +420,12 @@ init_env () {
 	[[ -n "${_BOOTLOADER}" ]] && \
 		CMD_ADDPKG="${_BOOTLOADER} ${CMD_ADDPKG//,/ }"
 
+	[[ -n "${CMD_THIRD}" ]] && {
+		[[ -e "${CMD_THIRD}" ]] && \
+			THIRD="${CMD_THIRD}" || \
+			die "ERR (${FUNCNAME:-Unknown}) > Third party \"${CMD_THIRD}\" specified but not found !"
+	}
+
 	find_nbd
 	find_loop
 }
@@ -723,11 +729,11 @@ excute_third_part () {
 	echo "Keep current location for bad scripters ..."
 	__current_location="${PWD}"
 
-	[[ ! -z "${CMD_THIRD}" ]] && {
+	[[ ! -z "${THIRD}" ]] && {
 		MOUNT_POINT="${_MOUNT_POINT}"
-		[[ -d "${CMD_THIRD}" ]] && {
-			for _file in $(find "${CMD_THIRD}" \( -type f -o -type l \) \
-				-a -regex "${CMD_THIRD}/[0-9]+.*" | sort) ; do
+		[[ -d "${THIRD}" ]] && {
+			for _file in $(find "${THIRD}" \( -type f -o -type l \) \
+				-a -regex "${THIRD}/[0-9]+.*" | sort) ; do
 				echo ${_file} | grep -P "[0-9]{2}\.chroot.*" && {
 					echo "Running ${_file} in chroot environment"
 					run_ch "${_file}"
@@ -739,9 +745,9 @@ excute_third_part () {
 				}
 			done
 		}
-		[[ -f "${CMD_THIRD}" ]] && {
-			[[ -r "${CMD_THIRD}" ]] && {
-				. "${CMD_THIRD}"
+		[[ -f "${THIRD}" ]] && {
+			[[ -r "${THIRD}" ]] && {
+				. "${THIRD}"
 			} || {
 				echo "Third party unreadable. Ignored."
 			}
@@ -751,10 +757,10 @@ excute_third_part () {
 }
 
 execute_post_install () {
-	[ ! -z "${CMD_THIRD}" ] && {
-		[ -d "${CMD_THIRD}" ] && {
-			for _file in $(find "${CMD_THIRD}" \( -type f -o -type l \) \
-				-a -regex "${CMD_THIRD}/[0-9]+.*" | sort) ; do
+	[ ! -z "${THIRD}" ] && {
+		[ -d "${THIRD}" ] && {
+			for _file in $(find "${THIRD}" \( -type f -o -type l \) \
+				-a -regex "${THIRD}/[0-9]+.*" | sort) ; do
 				echo ${_file} | grep -P "[0-9]{2}\.post.*" && {
 					echo "Running ${_file} after all"
 					source ${_file}
