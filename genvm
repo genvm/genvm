@@ -725,7 +725,7 @@ $(cat ${1})
 [*_EOF_*]
 }
 
-excute_third_part () {
+execute_third_part () {
 	echo "Keep current location for bad scripters ..."
 	__current_location="${PWD}"
 	MOUNT_POINT="${_MOUNT_POINT}"
@@ -809,7 +809,7 @@ step_by_step () {
 	${_THIRD_ONLY} || set_machine_name
 	${_THIRD_ONLY} || set_passwd_to root "${_ROOTPWD}"
 	${_THIRD_ONLY} || clean_install
-	excute_third_part
+	execute_third_part
 	${_INTERACTIVE_SEQUENCE} && interactive_seq
 	cleaning
 	execute_post_install
