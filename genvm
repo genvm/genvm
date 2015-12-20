@@ -51,7 +51,7 @@ FORMAT="vmdk"
 MINIMAL_SIZE=500M
 ERROR_MINIMAL_SIZE=1M
 
-declare -a STEPS PARTSTABLE ORDER_TABLE MONTEDPARTS
+declare -a STEPS PARTSTABLE ORDER_TABLE MONTEDPARTS THIRD_ARRAY
 
 REGEXP_SWAP='^sw(ap)?$'
 REGEXP_APPROXIMATIVE_SWAP='.*sw(ap)?.*'
@@ -420,11 +420,11 @@ init_env () {
 	[[ -n "${_BOOTLOADER}" ]] && \
 		CMD_ADDPKG="${_BOOTLOADER} ${CMD_ADDPKG//,/ }"
 
-	[[ -n "${CMD_THIRD}" ]] && {
-		[[ -e "${CMD_THIRD}" ]] && \
-			THIRD="${CMD_THIRD}" || \
-			die "ERR (${FUNCNAME:-Unknown}) > Third party \"${CMD_THIRD}\" specified but not found !"
-	}
+	for _third in "${THIRD_ARRAY[@]}" ; do
+		[[ -e "${_third}" ]] || {
+			die "ERR (${FUNCNAME:-Unknown}) > Third party \"${_third}\" specified but not found !"
+		}
+	done
 
 	find_nbd
 	find_loop
@@ -728,9 +728,9 @@ $(cat ${1})
 excute_third_part () {
 	echo "Keep current location for bad scripters ..."
 	__current_location="${PWD}"
+	MOUNT_POINT="${_MOUNT_POINT}"
 
-	[[ ! -z "${THIRD}" ]] && {
-		MOUNT_POINT="${_MOUNT_POINT}"
+	for THIRD in "${THIRD_ARRAY[@]}" ; do
 		[[ -d "${THIRD}" ]] && {
 			for _file in $(find "${THIRD}" \( -type f -o -type l \) \
 				-a -regex "${THIRD}/[0-9]+.*" | sort) ; do
@@ -745,19 +745,21 @@ excute_third_part () {
 				}
 			done
 		}
-		[[ -f "${THIRD}" ]] && {
-			[[ -r "${THIRD}" ]] && {
-				. "${THIRD}"
+		local 3rdscript=$(dirname "$(readlink -f "${THIRD}")")/$(basename "${THIRD}")
+		[[ -f "${3rdscript}" ]] && {
+			[[ -r "${3rdscript}" ]] && {
+				THIRD=$(dirname "${3rdscript}")
+				. "${3rdscript}"
 			} || {
 				echo "Third party unreadable. Ignored."
 			}
 		}
-	}
+	done
 	cd "${__current_location}"
 }
 
 execute_post_install () {
-	[ ! -z "${THIRD}" ] && {
+	for THIRD in "${THIRD_ARRAY[@]}" ; do
 		[ -d "${THIRD}" ] && {
 			for _file in $(find "${THIRD}" \( -type f -o -type l \) \
 				-a -regex "${THIRD}/[0-9]+.*" | sort) ; do
@@ -767,7 +769,7 @@ execute_post_install () {
 				}
 			done
 		}
-	}
+	done
 }
 
 interactive_seq () {
@@ -864,7 +866,7 @@ while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
 		S)
 			CMD_SERVER=${OPTARG} ;;
 		t)
-			CMD_THIRD=${OPTARG%/} ;;
+			THIRD_ARRAY[${#THIRD_ARRAY[@]}]="${OPTARG%/}" ;;
 		T)
 			_THIRD_ONLY=true ;;
 		n)
