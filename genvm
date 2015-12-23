@@ -744,18 +744,19 @@ execute_third_part () {
 					cd "${__current_location}"
 				}
 			done
-		}
-		local 3rdscript=$(dirname "$(readlink -f "${THIRD}")")/$(basename "${THIRD}")
-		[[ -f "${3rdscript}" ]] && {
-			[[ -r "${3rdscript}" ]] && {
-				THIRD=$(dirname "${3rdscript}")
-				. "${3rdscript}"
-			} || {
-				echo "Third party unreadable. Ignored."
+		} || {
+			local _3rdscript=$(dirname "$(readlink -f "${THIRD}")")/$(basename "${THIRD}")
+			[[ -f "${_3rdscript}" ]] && {
+				[[ -r "${_3rdscript}" ]] && {
+					THIRD=$(dirname "${_3rdscript}")
+					. "${_3rdscript}"
+				} || {
+					echo "Third party unreadable. Ignored."
+				}
 			}
 		}
+		cd "${__current_location}"
 	done
-	cd "${__current_location}"
 }
 
 execute_post_install () {
