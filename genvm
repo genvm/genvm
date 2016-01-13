@@ -623,7 +623,7 @@ install_pkgs () {
 	[[ -z "${CMD_ADDPKG//[[:blank:]]/}" ]] && return 0
 	echo "Installing package \"${CMD_ADDPKG% }\""
 	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
-export PATH=${_DEFAULT_PATH}
+export PATH="${_DEFAULT_PATH}"
 source /etc/profile
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -671,14 +671,14 @@ umount_fs_proc () {
 install_grub () {
 	echo "chroot ${_MOUNT_POINT} /usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules='ext2 part_msdos' ${_NBD}"
 	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
-export PATH=${_DEFAULT_PATH}
+export PATH="${_DEFAULT_PATH}"
 source /etc/profile
 /usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules="ext2 part_msdos" ${_NBD}
 __EOF__
 	[[ $? -gt 0 ]] && \
 		die "ERR (${FUNCNAME:-Unknown}) > Installation of grub failed. Exit."
 	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
-export PATH=${_DEFAULT_PATH}
+export PATH="${_DEFAULT_PATH}"
 source /etc/profile
 grub-mkconfig | grep -v ^[[:blank:]]loopback.* | grep -v "^[[:blank:]]set\ root=.*" > /boot/grub/grub.cfg
 __EOF__
@@ -712,7 +712,7 @@ EOF
 
 clean_install () {
 	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
-export PATH=${_DEFAULT_PATH}
+export PATH="${_DEFAULT_PATH}"
 source /etc/profile
 /usr/bin/apt-get clean
 [[ -e /usr/sbin/policy-rc.d ]] && rm /usr/sbin/policy-rc.d
@@ -725,7 +725,7 @@ set_machine_name () {
 
 run_ch () {
 	chroot ${MOUNT_POINT} /bin/bash <<[*_EOF_*]
-export PATH=${_DEFAULT_PATH}
+export PATH="${_DEFAULT_PATH}"
 source /etc/profile
 $(cat ${1})
 [*_EOF_*]
@@ -782,11 +782,15 @@ execute_post_install () {
 interactive_seq () {
 	enable_output
 	echo -ne "\n\n*** ENTERING IN INTERACTIVE SHELL ***\n\n"
-	echo "You are here : ${PWD}"
-	echo "Virtual machine is mounted here : ${_MOUNT_POINT}"
+	echo "You are here : ${PWD} (in \$back)"
+	echo "Virtual machine is mounted here : ${_MOUNT_POINT} (in \$mntpt)"
+	echo "PATH is set to : ${_DEFAULT_PATH}"
 	echo "Press \"Ctrl+d\" or \"exit\" to exit"
 	echo -ne "\n\n"
-	/bin/bash --noprofile --norc
+	( PATH="${PATH}:${_DEFAULT_PATH}" \
+		mntpt="${_MOUNT_POINT}" \
+		back="${PWD}" \
+		/bin/bash --noprofile --norc )
 	echo -ne "\n\n*** END OF INTERACTIVE SEQUENCE ***\n\n"
 	init_out
 }
