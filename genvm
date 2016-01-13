@@ -795,9 +795,9 @@ step_by_step () {
 	mountfs
 	${_THIRD_ONLY} || install_sys
 	${_THIRD_ONLY} || generatefstab
-	${_THIRD_ONLY} || install_pkgs 
 	mount_fs_dev
 	mount_fs_proc
+	${_THIRD_ONLY} || install_pkgs 
 	${_THIRD_ONLY} || case ${_BOOTLOADER} in
 		grub2)
 			install_grub ;;
