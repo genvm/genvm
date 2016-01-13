@@ -784,7 +784,7 @@ interactive_seq () {
 	echo -ne "\n\n*** ENTERING IN INTERACTIVE SHELL ***\n\n"
 	echo "You are here : ${PWD} (in \$back)"
 	echo "Virtual machine is mounted here : ${_MOUNT_POINT} (in \$mntpt)"
-	echo "PATH is set to : ${_DEFAULT_PATH}"
+	echo "Overload PATH by : ${_DEFAULT_PATH}"
 	echo "Press \"Ctrl+d\" or \"exit\" to exit"
 	echo -ne "\n\n"
 	( PATH="${PATH}:${_DEFAULT_PATH}" \
