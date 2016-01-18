@@ -1,4 +1,6 @@
-GenVM Is a powerfull script designed to generate minimum and complete 
+![GenVM](http://www.genvm.eu/img/logo.png "GenVM")
+
+GenVM Is a poerfull script designed to generate minimum and complete 
 Debian and Ubuntu virtual machines for KVM/QEMU (so usable in ProxMox, 
 libvirtd, ...), VirtualBox and VMWare.
 
@@ -14,20 +16,22 @@ Arch Linux.
 
 # Generated VM
 
-debian    wheezy    7.X    i386
-debian    wheezy    7.X    amd64
-debian    jessie    8.X    i386
-debian    jessie    8.X    amd64
-debian    stretch   9.X    i386
-debian    stretch   9.X    amd64
-ubuntu    trusty    14.04  i386
-ubuntu    trusty    14.04  amd64
-ubuntu    wily      15.10  i386
-ubuntu    wily      15.10  amd64
-ubuntu    precise   12.04  i386
-ubuntu    precise   12.04  amd64
-ubuntu    vivid     15.04  i386
-ubuntu    vivid     15.04  amd64
+| Distrib. | Name    | Rev    | Cool  |
+| -------- |:-------:|:------:|:-----:|
+| debian   | wheezy  |  7.X   | i386  |
+| debian   | wheezy  |  7.X   | amd64 |
+| debian   | jessie  |  8.X   | i386  |
+| debian   | jessie  |  8.X   | amd64 |
+| debian   | stretch |  9.X   | i386  |
+| debian   | stretch |  9.X   | amd64 |
+| ubuntu   | trusty  |  14.04 | i386  |
+| ubuntu   | trusty  |  14.04 | amd64 |
+| ubuntu   | wily    |  15.10 | i386  |
+| ubuntu   | wily    |  15.10 | amd64 |
+| ubuntu   | precise |  12.04 | i386  |
+| ubuntu   | precise |  12.04 | amd64 |
+| ubuntu   | vivid   |  15.04 | i386  |
+| ubuntu   | vivid   |  15.04 | amd64 |
  
 # Installation
 
