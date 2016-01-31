@@ -737,6 +737,9 @@ execute_third_part () {
 	MOUNT_POINT="${_MOUNT_POINT}"
 
 	for THIRD in "${THIRD_ARRAY[@]}" ; do
+		[[ -L "${THIRD}" ]] && {
+			THIRD="$(readlink -f "${THIRD}")"
+		}
 		[[ -d "${THIRD}" ]] && {
 			for _file in $(find "${THIRD}" \( -type f -o -type l \) \
 				-a -regex "${THIRD}/[0-9]+.*" | sort) ; do
@@ -751,7 +754,7 @@ execute_third_part () {
 				}
 			done
 		} || {
-			local _3rdscript=$(dirname "$(readlink -f "${THIRD}")")/$(basename "${THIRD}")
+			local _3rdscript=$(dirname "${THIRD}")/$(basename "${THIRD}")
 			[[ -f "${_3rdscript}" ]] && {
 				[[ -r "${_3rdscript}" ]] && {
 					THIRD=$(dirname "${_3rdscript}")
