@@ -394,10 +394,7 @@ init_env () {
 		[[ -r ${CMD_LISTPKG} ]] && {
 			__content=$(sed '{s/[[:blank:]]//g;s/#.*$//g;s,//.*,,g;/^$/d;s/-$//}' ${CMD_LISTPKG} | sed ':a;N;$!ba;s/\n/ /g')
 			CMD_ADDPKG="${CMD_ADDPKG//,/ } ${__content}"
-		} || {
-			echo "list of package not readable. skip it."
-			CMD_LISTPKG=""
-		}
+		} || die "ERR (${FUNCNAME:-Unknown}) > Package list \"${CMD_LISTPKG}\" not found or unreadable."
 	}
 	echo "use server ${_SERVER} to installation"
 	case ${_ARCH} in
