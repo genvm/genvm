@@ -376,6 +376,8 @@ init_env () {
 			echo "\"${fic}\" found and is readable : loading"
 			source ${fic}
 			break
+		} || {
+			echo "WARNING configuration file \"${fic}\" not found. Ignored."
 		}
 	done
 	HD_IMG=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}")
