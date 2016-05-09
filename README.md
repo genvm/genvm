@@ -32,6 +32,8 @@ Arch Linux.
 | ubuntu   | vivid   |  15.04 | amd64 |
 | ubuntu   | wily    |  15.10 | i386  |
 | ubuntu   | wily    |  15.10 | amd64 |
+| ubuntu   | xenial  |  16.04 | i386  |
+| ubuntu   | xenial  |  16.04 | amd64 |
  
 # Installation
 
