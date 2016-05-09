@@ -114,8 +114,8 @@ Example :
 	> set_passwd_to foo bar
 	> wget http://my.site/archive.zip -O \${MOUNT_POINT}/archive.zip
 
-run "adduser" in new environnement, set foo password to bar and download http://my.site/archive.zip 
-from host and paste it in the new environement. 
+run "adduser" in new environnement, set foo password to bar and download http://my.site/archive.zip
+from host and paste it in the new environement.
 EOF
 	exit ${1:-1}
 }
@@ -160,7 +160,7 @@ find_loop () {
 	[ -z "${_LOOP}" ] && {
 		${CALL_BACK} && {
 			die "ERR (${FUNCNAME:-Unknown}) > No loop device found. Execution failed"
-		} || { 
+		} || {
 			echo "No loop device found. Trying to load module"
 			modprobe loop || die "ERR (${FUNCNAME:-Unknown}) > No loop device found and module cant be load"
 			find_loop true
@@ -225,7 +225,7 @@ init_out () {
 	}
 #	Select verbose mode
 	${_VERBOSE} || { disable_output ; }
-} 
+}
 
 size_converter () {
 	[[ -z "${1//[0-9]}" ]] && {
@@ -298,7 +298,7 @@ validate_partitions () {
 		} || {
 			${WARN:=true} && [[ ${entry[0],,} =~ ${REGEXP_APPROXIMATIVE_SWAP} ]] && {
 				warn "\n>>> Warning: partition name \"${entry[0]}\" is proch of \"sw\" or \"swap\". Did you meen \"swap\" ? <<<\n If needed, press Ctrl+c to exit and modify your partitions definitions.\n"
-				sleep 10 
+				sleep 10
 			}
 
 			_mount_point="$(echo ${entry[0]%/} | sed -e 's/[[:blank:]]/ /g')"
@@ -344,7 +344,7 @@ validate_partitions () {
 	[[ ${entry[2]} =~ ${REGEXP_SWAP} ]] && \
 			fstype["mkswap"]=true || \
 			fstype["mkfs.${entry[2]:=ext4}"]=true
-	
+
 		PARTSTABLE[${#PARTSTABLE[*]}]="$(( ${_nbre_slash} + 1 )):$(( ${#PARTSTABLE[*]} + 1)):${_mount_point}:${_size}:${entry[2]:=ext4}:${entry[3]:=defaults}:${entry[4]:=0}:${entry[5]:=2}:${entry[6]:=${_mount_point//[[:blank:]]}}"
 
 		unset _size entry _mount_point _only_slash _nbre_slash
@@ -367,19 +367,20 @@ validate_partitions () {
 	done | sort -t: -nk 1) )
 
 	NEEDED_COMMANDS=${!fstype[*]}
-	check_requirements	
+	check_requirements
 }
 
 # init environment
 init_env () {
-#	Search a config file	
+#	Search a config file
 	for fic in ${_CONFIG_FILE} ; do
 		[[ -r "${fic}" ]] && {
 			echo "\"${fic}\" found and is readable : loading"
 			source ${fic}
 			break
 		} || {
-			echo "WARNING configuration file \"${fic}\" not found. Ignored."
+			warn "\n>>> Warning: configuration file \"${fic}\" not found. Ignored! <<<"
+			${warn:=true} && sleep 5
 		}
 	done
 	HD_IMG=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}")
@@ -504,7 +505,7 @@ partitiondrive () {
 		(( _point = ( _point + _line[3] / 1024 ) + 1 ))
 		[[ ${_PARTBOOT} -eq ${_line[1]} ]] && _cmd="${_cmd} set ${_PARTBOOT} boot on "
 	done
-	
+
 	echo "executing : parted -s -a none ${_NBD} mklabel msdos unit KiB -- ${_cmd} print"
 	parted -s -a none ${_NBD} mklabel msdos unit KiB -- ${_cmd} print || \
 		die "ERR (${FUNCNAME:-Unknown}) > Partitioning ${_NBD} Failed !"
@@ -808,7 +809,7 @@ step_by_step () {
 	${_THIRD_ONLY} || generatefstab
 	mount_fs_dev
 	mount_fs_proc
-	${_THIRD_ONLY} || install_pkgs 
+	${_THIRD_ONLY} || install_pkgs
 	${_THIRD_ONLY} || case ${_BOOTLOADER} in
 		grub2|grub-pc)
 			install_grub ;;
