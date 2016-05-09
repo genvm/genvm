@@ -614,9 +614,15 @@ umountfs () {
 		echo "${FUNCNAME:-Unknown}: filesystems unmounted"
 }
 
-install_sys () {
+install_sys_debian () {
 	echo "debootstrap --arch=${_ARCH} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER}"
 	debootstrap --arch=${_ARCH} --variant=minbase "${_VERSION}" "${_MOUNT_POINT}" "${_SERVER}" || {
+		die "ERR (${FUNCNAME:-Unknown}) > installation failed. Exit."
+	}
+}
+install_sys_ubuntu () {
+	echo "debootstrap --arch=${_ARCH} --include ubuntu-minimal ${_VERSION} ${_MOUNT_POINT} ${_SERVER}"
+	debootstrap --arch=${_ARCH} --include ubuntu-minimal "${_VERSION}" "${_MOUNT_POINT}" "${_SERVER}" || {
 		die "ERR (${FUNCNAME:-Unknown}) > installation failed. Exit."
 	}
 }
@@ -686,6 +692,48 @@ grub-mkconfig | grep -v ^[[:blank:]]loopback.* | grep -v "^[[:blank:]]set\ root=
 __EOF__
 	[[ $? -gt 0 ]] && \
 		warn ">>> Warning: Update grub2 failed ! <<<"
+}
+
+install_grub-pc () {
+	echo "chroot ${_MOUNT_POINT} /usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules='ext2 part_msdos' ${_NBD}"
+	enable_output
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
+source /etc/profile
+grub-mkdevicemap
+cat /boot/grub/device.map
+/usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules="ext2 part_msdos" ${_NBD}
+__EOF__
+	[[ $? -gt 0 ]] && \
+		die "ERR (${FUNCNAME:-Unknown}) > Installation of grub failed. Exit."
+	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
+source /etc/profile
+rm /etc/grub.d/30_os-prober
+grub-mkconfig | grep -v ^[[:blank:]]loopback.* | grep -v "^[[:blank:]]set\ root=.*" > /boot/grub/grub.cfg
+
+# Conf grub
+cat /etc/default/grub | while read lineGrub
+do 
+   if [ "$lineGrub" = "GRUB_HIDDEN_TIMEOUT=0" ]; then
+  		echo -e "# $lineGrub"
+   	else
+   		echo -e "$lineGrub"
+  fi
+done > /etc/default/grub.new;
+
+mv /etc/default/grub.new /etc/default/grub
+sed "/set root='(\/dev\/loop[0-9])'/d" /boot/grub/grub.cfg | \
+sed "N;s/[ \t]*insmod ext2\n/insmod ext2 \ninsmod part_msdos\nset root='(\/dev\/sda,msdos1)'\n/g;P;D" | \
+sed "/loopback loop0 \/mapper\/nbd[0-9]p[0-9]/d" | \
+sed "/set root=(loop[0-9])/d" > /boot/grub/grub.cfg.new
+
+mv /boot/grub/grub.cfg.new /boot/grub/grub.cfg
+
+__EOF__
+	[[ $? -gt 0 ]] && {
+		enable_output
+		echo ">>> Warning: Update grub2 failed ! <<<" >&2
+		init_out
+	}
 }
 
 set_passwd_to () {
@@ -805,14 +853,26 @@ step_by_step () {
 	${_THIRD_ONLY} || create_filesystem
 	create_tempdir
 	mountfs
-	${_THIRD_ONLY} || install_sys
+	${_THIRD_ONLY} || case ${_BOOTLOADER} in
+		grub2)
+			install_sys_debian ;;
+		grub-pc)
+			install_sys_ubuntu ;;
+		*)
+			echo -e "\n\n*** Distribution unknown ! Install interactively ***\n\n"
+			sleep 2
+			_INTERACTIVE_SEQUENCE=true
+			;;
+	esac
 	${_THIRD_ONLY} || generatefstab
 	mount_fs_dev
 	mount_fs_proc
 	${_THIRD_ONLY} || install_pkgs
 	${_THIRD_ONLY} || case ${_BOOTLOADER} in
-		grub2|grub-pc)
+		grub2)
 			install_grub ;;
+		grub-pc)
+			install_grub-pc ;;
 		*)
 			echo -e "\n\n*** Boot loader unknown ! Install interactively ***\n\n"
 			sleep 2
