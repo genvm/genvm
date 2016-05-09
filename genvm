@@ -127,6 +127,12 @@ die () {
 	exit 1
 }
 
+warn () {
+	enable_output
+	echo -e "$@" >&2
+	init_out
+}
+
 Kill () {
 	enable_output
 	echo "$@" >&2
@@ -291,9 +297,7 @@ validate_partitions () {
 			entry[5]=0
 		} || {
 			${WARN:=true} && [[ ${entry[0],,} =~ ${REGEXP_APPROXIMATIVE_SWAP} ]] && {
-				enable_output
-				echo -e "\n>>> Warning: partition name \"${entry[0]}\" is proch of \"sw\" or \"swap\". Did you meen \"swap\" ? <<<\n If needed, press Ctrl+c to exit and modify your partitions definitions.\n" >&2
-				init_out
+				warn "\n>>> Warning: partition name \"${entry[0]}\" is proch of \"sw\" or \"swap\". Did you meen \"swap\" ? <<<\n If needed, press Ctrl+c to exit and modify your partitions definitions.\n"
 				sleep 10 
 			}
 
@@ -325,9 +329,7 @@ validate_partitions () {
 			${warn:=true} && [[ ${_rest_size} -le $(size_converter ${MINIMAL_SIZE}) ]] && {
 				[[ ${_rest_size} -le $(size_converter ${ERROR_MINIMAL_SIZE:=1M}) ]] && \
 					die "ERR (${FUNCNAME:-Unknown}) > All Partitions can't be contain in image size (set to ${_SIZE}, use '-s' to change image size)."
-				enable_output
-				echo -e "\n>>> Warning: Size of last partition is less than ${MINIMAL_SIZE} ($(size2humain_readable ${_rest_size})) ! <<<\n Press Ctrl+c to exit and modify your partitions definitions.\n" >&2
-				init_out
+				warn "\n>>> Warning: Size of last partition is less than ${MINIMAL_SIZE} ($(size2humain_readable ${_rest_size})) ! <<<\n Press Ctrl+c to exit and modify your partitions definitions.\n"
 				sleep 10
 			}
 		} || {
@@ -679,11 +681,8 @@ export PATH="${_DEFAULT_PATH}"
 source /etc/profile
 grub-mkconfig | grep -v ^[[:blank:]]loopback.* | grep -v "^[[:blank:]]set\ root=.*" > /boot/grub/grub.cfg
 __EOF__
-	[[ $? -gt 0 ]] && {
-		enable_output
-		echo ">>> Warning: Update grub2 failed ! <<<" >&2
-		init_out
-	}
+	[[ $? -gt 0 ]] && \
+		warn ">>> Warning: Update grub2 failed ! <<<"
 }
 
 set_passwd_to () {
@@ -857,11 +856,8 @@ while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
 			}
 			[ -d "${OPTARG}" -a -w "${OPTARG}" ] && {
 				_TMPDIR="${OPTARG%/}"
-			} || {
-				enable_output
-				echo ">>> Warning: ${OPTARG} not a directory or not writable. Option ignored <<<" >&2
-				init_out
-			} ;;
+			} || \
+				warn ">>> Warning: ${OPTARG} not a directory or not writable. Option ignored <<<" ;;
 		p)
 			CMD_ROOTPWD="${OPTARG}" ;;
 		P)
