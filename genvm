@@ -41,6 +41,7 @@ _TMPDIR="/tmp"
 _PARTBOOT=
 _DEFAULT_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 APT_OPTS="--no-install-recommends"
+BOOTSTRAP_OPTS="--variant=minbase"
 SECURE_TMOUT=1
 ARCH="amd64"
 KERNEL="linux-image-"
@@ -612,8 +613,8 @@ umountfs () {
 }
 
 install_sys () {
-	echo "debootstrap --arch=${_ARCH} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER}"
-	debootstrap --arch=${_ARCH} --variant=minbase "${_VERSION}" "${_MOUNT_POINT}" "${_SERVER}" || {
+	echo "debootstrap --arch=${_ARCH} ${BOOTSTRAP_OPTS} ${_VERSION} ${_MOUNT_POINT} ${_SERVER}"
+	debootstrap --arch=${_ARCH} ${BOOTSTRAP_OPTS} "${_VERSION}" "${_MOUNT_POINT}" "${_SERVER}" || {
 		die "ERR (${FUNCNAME:-Unknown}) > installation failed. Exit."
 	}
 }
