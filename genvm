@@ -378,10 +378,7 @@ init_env () {
 			echo "\"${fic}\" found and is readable : loading"
 			source ${fic}
 			break
-		} || {
-			warn "\n>>> Warning: configuration file \"${fic}\" not found. Ignored! <<<"
-			${warn:=true} && sleep 5
-		}
+		} || die "ERR (${FUNCNAME:-Unknown}) > configuration file \"${fic}\" not found."
 	done
 	HD_IMG=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}")
 	: ${NAME:=$(hostname -s)}
