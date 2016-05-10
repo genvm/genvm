@@ -16,7 +16,7 @@ Arch Linux.
 
 # Generated VM
 
-| Distrib. | Name    | Rev    | Cool  |
+| Distrib. | Name    | Rev    | Arch  |
 | -------- |:-------:|:------:|:-----:|
 | debian   | wheezy  |  7.X   | i386  |
 | debian   | wheezy  |  7.X   | amd64 |
@@ -34,7 +34,8 @@ Arch Linux.
 | ubuntu   | wily    |  15.10 | amd64 |
 | ubuntu   | xenial  |  16.04 | i386  |
 | ubuntu   | xenial  |  16.04 | amd64 |
- 
+
+
 # Installation
 
 No special installation needed, only download the last version of GenVM,
