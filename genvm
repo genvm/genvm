@@ -30,7 +30,7 @@ debootstrap cat chroot umount modprobe cat source mkswap basename readlink dirna
 blkid tee"
 
 _SCRIPT_NAME=$(basename $0)
-_CONFIG_FILE="${HOME}/.${_SCRIPT_NAME}.conf /etc/${_SCRIPT_NAME}.conf"
+_CONFIG_FILE=( "/etc/${_SCRIPT_NAME}.conf" "/root/.${_SCRIPT_NAME}.conf" )
 _VERBOSE=false
 _DEBUG=false
 _NBD=""
@@ -71,7 +71,7 @@ Options
 	-a	: architecture : amd64, i386 (default : ${ARCH})
 	-A	: additionals package to install in vm
 	-b	: bootloader (only ${BOOTLOADER} supported actualy)
-	-c	: specify a config file (first in ${_CONFIG_FILE})
+	-c	: specify a config file (default: ${_CONFIG_FILE[*]})
 	-D	: debug mode
 	-f	: format of image : raw, qcow2, qcow, vmdk (default : ${FORMAT})
 	-h	: this message
@@ -373,12 +373,14 @@ validate_partitions () {
 # init environment
 init_env () {
 #	Search a config file
-	for fic in ${_CONFIG_FILE} ; do
+	for fic in ${_CONFIG_FILE[*]} ; do
 		[[ -r "${fic}" ]] && {
 			echo "\"${fic}\" found and is readable : loading"
 			source ${fic}
-			break
-		} || die "ERR (${FUNCNAME:-Unknown}) > configuration file \"${fic}\" not found."
+		} || {
+			${__personal_config:-false} && \
+			 die "ERR (${FUNCNAME:-Unknown}) > Configuration file \"${fic}\" specified but not found."
+		}
 	done
 	HD_IMG=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}")
 	: ${NAME:=$(hostname -s)}
@@ -839,7 +841,11 @@ while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
 		b)
 			CMD_BOOTLOADER=${OPTARG} ;;
 		c)
-			_CONFIG_FILE=${OPTARG} ;;
+			${__personal_config:-false} || {
+				unset _CONFIG_FILE
+				__personal_config=true
+			}
+			_CONFIG_FILE[${#_CONFIG_FILE[@]}]="${OPTARG}" ;;
 		D)
 			_DEBUG=true ;;
 		f)
