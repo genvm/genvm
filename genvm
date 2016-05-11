@@ -30,7 +30,7 @@ debootstrap cat chroot umount modprobe cat source mkswap basename readlink dirna
 blkid tee"
 
 _SCRIPT_NAME=$(basename $0)
-_CONFIG_FILE="${HOME}/.${_SCRIPT_NAME}.conf /etc/${_SCRIPT_NAME}.conf"
+_CONFIG_FILE=( "/etc/${_SCRIPT_NAME}.conf" "/root/.${_SCRIPT_NAME}.conf" )
 _VERBOSE=false
 _DEBUG=false
 _NBD=""
@@ -41,12 +41,12 @@ _TMPDIR="/tmp"
 _PARTBOOT=
 _DEFAULT_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 APT_OPTS="--no-install-recommends"
+BOOTSTRAP_OPTS="--variant=minbase"
 SECURE_TMOUT=1
 ARCH="amd64"
 KERNEL="linux-image-"
 BOOTLOADER="grub2"
 VERSION="jessie"
-SERVER="http://ftp.debian.org/debian"
 SIZE="5G"
 FORMAT="vmdk"
 MINIMAL_SIZE=500M
@@ -71,7 +71,7 @@ Options
 	-a	: architecture : amd64, i386 (default : ${ARCH})
 	-A	: additionals package to install in vm
 	-b	: bootloader (only ${BOOTLOADER} supported actualy)
-	-c	: specify a config file (first in ${_CONFIG_FILE})
+	-c	: specify a config file (default: ${_CONFIG_FILE[*]})
 	-D	: debug mode
 	-f	: format of image : raw, qcow2, qcow, vmdk (default : ${FORMAT})
 	-h	: this message
@@ -83,7 +83,7 @@ Options
 	-p	: root password (default : ask to user)
 	-P	: definition of partitions
 	-s	: image size (default : ${SIZE})
-	-S	: server to download debian (default : ${SERVER})
+	-S	: server to download packages
 	-t	: script to run after installation
 	-T	: run third party only
 	-v	: verbose mode
@@ -373,14 +373,13 @@ validate_partitions () {
 # init environment
 init_env () {
 #	Search a config file
-	for fic in ${_CONFIG_FILE} ; do
+	for fic in ${_CONFIG_FILE[*]} ; do
 		[[ -r "${fic}" ]] && {
 			echo "\"${fic}\" found and is readable : loading"
 			source ${fic}
-			break
 		} || {
-			warn "\n>>> Warning: configuration file \"${fic}\" not found. Ignored! <<<"
-			${warn:=true} && sleep 5
+			${__personal_config:-false} && \
+			 die "ERR (${FUNCNAME:-Unknown}) > Configuration file \"${fic}\" specified but not found."
 		}
 	done
 	HD_IMG=$(dirname "$(readlink -f "${HD_IMG}")")/$(basename "${HD_IMG}")
@@ -394,14 +393,14 @@ init_env () {
 	echo "architecture : ${_ARCH}"
 	: ${_VERSION:=${CMD_VERSION:=${VERSION}}}
 	echo "install debian ${_VERSION}"
-	: ${_SERVER:=${CMD_SERVER:=${SERVER}}}
 	[[ ! -z "${CMD_LISTPKG}" ]] && {
 		[[ -r ${CMD_LISTPKG} ]] && {
 			__content=$(sed '{s/[[:blank:]]//g;s/#.*$//g;s,//.*,,g;/^$/d;s/-$//}' ${CMD_LISTPKG} | sed ':a;N;$!ba;s/\n/ /g')
 			CMD_ADDPKG="${CMD_ADDPKG//,/ } ${__content}"
 		} || die "ERR (${FUNCNAME:-Unknown}) > Package list \"${CMD_LISTPKG}\" not found or unreadable."
 	}
-	echo "use server ${_SERVER} to installation"
+	[[ -n "${SERVER}" ]] && \
+		echo "use server ${SERVER} to installation"
 	case ${_ARCH} in
 		amd64)	KARCH=${_ARCH} ;;
 		i386) 	KARCH="686-pae" ;;
@@ -615,8 +614,8 @@ umountfs () {
 }
 
 install_sys () {
-	echo "debootstrap --arch=${_ARCH} --variant=minbase ${_VERSION} ${_MOUNT_POINT} ${_SERVER}"
-	debootstrap --arch=${_ARCH} --variant=minbase "${_VERSION}" "${_MOUNT_POINT}" "${_SERVER}" || {
+	echo "debootstrap --arch=${_ARCH} ${BOOTSTRAP_OPTS} ${_VERSION} ${_MOUNT_POINT} ${SERVER}"
+	debootstrap --arch=${_ARCH} ${BOOTSTRAP_OPTS} "${_VERSION}" "${_MOUNT_POINT}" "${SERVER}" || {
 		die "ERR (${FUNCNAME:-Unknown}) > installation failed. Exit."
 	}
 }
@@ -841,7 +840,11 @@ while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
 		b)
 			CMD_BOOTLOADER=${OPTARG} ;;
 		c)
-			_CONFIG_FILE=${OPTARG} ;;
+			${__personal_config:-false} || {
+				unset _CONFIG_FILE
+				__personal_config=true
+			}
+			_CONFIG_FILE[${#_CONFIG_FILE[@]}]="${OPTARG}" ;;
 		D)
 			_DEBUG=true ;;
 		f)
@@ -874,7 +877,7 @@ while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
 		s)
 			SIZE=${OPTARG} ;;
 		S)
-			CMD_SERVER=${OPTARG} ;;
+			SERVER="${OPTARG}" ;;
 		t)
 			THIRD_ARRAY[${#THIRD_ARRAY[@]}]="${OPTARG%/}" ;;
 		T)
