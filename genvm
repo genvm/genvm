@@ -47,7 +47,6 @@ ARCH="amd64"
 KERNEL="linux-image-"
 BOOTLOADER="grub2"
 VERSION="jessie"
-SERVER="http://ftp.debian.org/debian"
 SIZE="5G"
 FORMAT="vmdk"
 MINIMAL_SIZE=500M
@@ -84,7 +83,7 @@ Options
 	-p	: root password (default : ask to user)
 	-P	: definition of partitions
 	-s	: image size (default : ${SIZE})
-	-S	: server to download debian (default : ${SERVER})
+	-S	: server to download packages
 	-t	: script to run after installation
 	-T	: run third party only
 	-v	: verbose mode
@@ -394,14 +393,14 @@ init_env () {
 	echo "architecture : ${_ARCH}"
 	: ${_VERSION:=${CMD_VERSION:=${VERSION}}}
 	echo "install debian ${_VERSION}"
-	: ${_SERVER:=${CMD_SERVER:=${SERVER}}}
 	[[ ! -z "${CMD_LISTPKG}" ]] && {
 		[[ -r ${CMD_LISTPKG} ]] && {
 			__content=$(sed '{s/[[:blank:]]//g;s/#.*$//g;s,//.*,,g;/^$/d;s/-$//}' ${CMD_LISTPKG} | sed ':a;N;$!ba;s/\n/ /g')
 			CMD_ADDPKG="${CMD_ADDPKG//,/ } ${__content}"
 		} || die "ERR (${FUNCNAME:-Unknown}) > Package list \"${CMD_LISTPKG}\" not found or unreadable."
 	}
-	echo "use server ${_SERVER} to installation"
+	[[ -n "${SERVER}" ]] && \
+		echo "use server ${SERVER} to installation"
 	case ${_ARCH} in
 		amd64)	KARCH=${_ARCH} ;;
 		i386) 	KARCH="686-pae" ;;
@@ -615,8 +614,8 @@ umountfs () {
 }
 
 install_sys () {
-	echo "debootstrap --arch=${_ARCH} ${BOOTSTRAP_OPTS} ${_VERSION} ${_MOUNT_POINT} ${_SERVER}"
-	debootstrap --arch=${_ARCH} ${BOOTSTRAP_OPTS} "${_VERSION}" "${_MOUNT_POINT}" "${_SERVER}" || {
+	echo "debootstrap --arch=${_ARCH} ${BOOTSTRAP_OPTS} ${_VERSION} ${_MOUNT_POINT} ${SERVER}"
+	debootstrap --arch=${_ARCH} ${BOOTSTRAP_OPTS} "${_VERSION}" "${_MOUNT_POINT}" "${SERVER}" || {
 		die "ERR (${FUNCNAME:-Unknown}) > installation failed. Exit."
 	}
 }
@@ -878,7 +877,7 @@ while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
 		s)
 			SIZE=${OPTARG} ;;
 		S)
-			CMD_SERVER=${OPTARG} ;;
+			SERVER="${OPTARG}" ;;
 		t)
 			THIRD_ARRAY[${#THIRD_ARRAY[@]}]="${OPTARG%/}" ;;
 		T)
