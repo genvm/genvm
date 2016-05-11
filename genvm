@@ -399,8 +399,7 @@ init_env () {
 			CMD_ADDPKG="${CMD_ADDPKG//,/ } ${__content}"
 		} || die "ERR (${FUNCNAME:-Unknown}) > Package list \"${CMD_LISTPKG}\" not found or unreadable."
 	}
-	SERVER="${CMD_SERVER}"
-	[[ -n ${SERVER} ]] && \
+	[[ -n "${SERVER}" ]] && \
 		echo "use server ${SERVER} to installation"
 	case ${_ARCH} in
 		amd64)	KARCH=${_ARCH} ;;
@@ -878,7 +877,7 @@ while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
 		s)
 			SIZE=${OPTARG} ;;
 		S)
-			CMD_SERVER=${OPTARG} ;;
+			SERVER="${OPTARG}" ;;
 		t)
 			THIRD_ARRAY[${#THIRD_ARRAY[@]}]="${OPTARG%/}" ;;
 		T)
