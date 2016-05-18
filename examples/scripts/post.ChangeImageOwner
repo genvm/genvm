@@ -1,0 +1,7 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Change owner of image generated
+
+source config.txt
+
+chown ${user}.${group} "${HD_IMG}"
+
