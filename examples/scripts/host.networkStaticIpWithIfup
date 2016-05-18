@@ -1,0 +1,16 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Configure the network
+
+cat > "${MOUNT_POINT}/etc/network/interfaces" <<[*_EOF_*]
+auto lo eth0
+
+iface lo inet loopback
+
+iface eth0 inet static
+	address <ip_srv>
+	netmask 255.255.255.0
+	gateway <your_gateway>
+	dns-search <domain.tld>
+	dns-nameservers <your_dns_address>
+
+[*_EOF_*]
