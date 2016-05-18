@@ -1,0 +1,10 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# This script load a file named "config.txt" to retrive domainname
+
+source "${THIRD}/config.txt"
+
+cat > "${MOUNT_POINT}/etc/sysctl.d/domain.conf" <<eof
+# Domaine par défaut :
+kernel.domainname=${domain:=mondomain.tld}
+eof
+
