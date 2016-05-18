@@ -1,0 +1,6 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# Keep system minimal by rejecting recommends packages
+
+cat > /etc/apt/apt.conf.d/02norecommends <<[*_EOF_*]
+APT::Install-Recommends False;
+[*_EOF_*]
