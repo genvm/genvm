@@ -1,0 +1,8 @@
+# Simple partitioning schema to 15G
+# first partition: /, 5G in ext4
+/:5G:ext4
+# second: swap, 1G
+sw:1G
+# third: /srv, 9G (the rest) in ext4 too
+/srv
+

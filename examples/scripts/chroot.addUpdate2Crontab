@@ -1,0 +1,11 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# Add "apt-get update" to /etc/crontab if this file exist
+
+crontabfile="/etc/crontab"
+
+[[ -e "${crontabfile}" ]] && grep -q 'apt-get update' "${crontabfile}" || \
+ cat >> "${crontabfile}" <<eof
+
+10 23 * * * root /usr/bin/apt-get update > /dev/null 2>&1
+
+eof

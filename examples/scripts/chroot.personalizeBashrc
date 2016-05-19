@@ -1,0 +1,26 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Configuration dans /etc/bash.bashrc
+
+grep 'trap clear 0' /etc/bash.bashrc || {
+
+ sed -i.bak '2itrap clear 0' /etc/bash.bashrc
+
+ cat >> /etc/bash.bashrc <<[-eof-]
+
+if [[ ${EUID} == 0 ]] ; then
+ TMOUT=900
+ PS1='\[\033[0;37m\]\t \[\033[01;32m\]\[\033[01;31m\]\h\[\033[01;34m\] \W #\[\033[00m\] '
+else
+ TMOUT=1800
+ PS1='\[\033[0;37m\]\t \[\033[01;32m\]\[\033[01;32m\]\u@\h\[\033[01;34m\] \w \$\[\033[00m\] '
+fi
+
+# declaration d'alias :
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+readonly TMOUT
+export TMOUT
+
+[-eof-]
+
+}

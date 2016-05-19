@@ -1,0 +1,22 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Configure locales
+
+# locales=( <list of locales separate by space, first is default one> )
+locales=( en_US.UTF-8 ) # List available on "/etc/locale.gen"
+
+# To set locales, uncomment desired locales on "/etc/locale.gen" and
+# run command "locale-gen".
+# Write LANG=<locale default> on "/etc/default/locale".
+
+IFS=$' \t\n'
+
+echo "Uncomment selected locales"
+for charset in ${locales[@]} ; do
+	sed -i "/^#[[:blank:]]*${charset}/s/^#[[:blank:]]*//" /etc/locale.gen
+done
+
+echo "Generate locales"
+locale-gen
+
+echo "Set default locale to ${locales[@]:0:1}"
+echo "LANG=${locales[@]:0:1}" > /etc/default/locale

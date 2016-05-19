@@ -1,0 +1,11 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Configure the network
+
+grep -E '^[[:blank:]]*PermitRootLogin[[:blank:]]*yes[[:blank:]]*' /etc/ssh/sshd_config || {
+ sed -i.bak -e 's/^\([[:blank:]]*PermitRootLogin[[:blank:]]*.*\)[[:blank:]]*$/# \1\nPermitRootLogin yes/' /etc/ssh/sshd_config
+}
+
+grep -E '^[[:blank:]]*PermitRootLogin[[:blank:]]*yes[[:blank:]]*' /etc/ssh/sshd_config || {
+ sed -i.bak -e '28iPermitRootLogin yes' /etc/ssh/sshd_config
+}
+

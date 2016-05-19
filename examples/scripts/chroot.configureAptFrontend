@@ -1,0 +1,4 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Configure frontend to debconf
+
+sed -i 's/^Value: Dialog/Value: Readline/g' /var/cache/debconf/config.dat
