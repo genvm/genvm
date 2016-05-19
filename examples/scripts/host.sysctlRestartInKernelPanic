@@ -1,0 +1,7 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+
+cat > "${MOUNT_POINT}/etc/sysctl.d/kernel.panic.conf" <<eof
+# Reboot automatique en cas de kernel panic :
+kernel.panic=60
+eof
+

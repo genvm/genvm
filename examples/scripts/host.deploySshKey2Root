@@ -1,0 +1,13 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Deploy public key(s)
+
+[[ -e "${MOUNT_POINT}/root/.ssh" ]] || {
+ mkdir -p "${MOUNT_POINT}/root/.ssh"
+}
+
+echo "" > "${MOUNT_POINT}/root/.ssh/authorized_keys"
+
+for key in ${sshkeys[*]} ; do
+ echo -e ${key} >> "${MOUNT_POINT}/root/.ssh/authorized_keys"
+done
+

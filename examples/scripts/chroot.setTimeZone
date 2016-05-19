@@ -1,0 +1,15 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Configure timezone
+
+timezone=Europe/Paris
+
+# You need 2 files to define time zone:
+# - /etc/timezone (containing timezone)
+# - /etc/localtime (link to /usr/share/zoneinfo/your desired timezone)
+
+echo ${timezone} > /etc/timezone
+
+[[ -e /etc/localtime ]] && \
+	rm /etc/localtime
+
+ln -s /usr/share/zoneinfo/${timezone} /etc/localtime

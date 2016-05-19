@@ -1,0 +1,5 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Configure Grub2
+
+grep '^GRUB_TIMEOUT=5' /etc/default/grub && sed -i /etc/default/grub -e "s/GRUB_TIMEOUT=5/GRUB_TIMEOUT=0\nGRUB_HIDDEN_TIMEOUT=0\nGRUB_HIDDEN_TIMEOUT_QUIET=true\n/"
+sed -i /boot/grub/grub.cfg -e 's/set timeout=5/set timeout=0/'
