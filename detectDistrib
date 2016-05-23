@@ -1,0 +1,27 @@
+#!/bin/bash
+
+ARCH=amd64
+mirror=http://ftp.fr.debian.org/debian
+debootstrap_scripts=/usr/share/debootstrap/scripts/
+
+findmirror () {
+ [[ -e "${debootstrap_scripts}/${1:?No distrib specified! Specify a distrib please.}" ]] || {
+  echo "${1} not found!"
+  exit 1
+ }
+ default_mirror () { mirror=${1:-debian} ; }
+ mirror_style () { return 0 ; }
+ download_style () { return 0 ; }
+ finddebs_style () { return 0 ; }
+ variants () { return 0 ; }
+ keyring () { return 0 ; }
+ doing_variant () { return 0 ; }
+ error () { return 0 ; }
+
+ source "${debootstrap_scripts}/${1}"
+ 
+ wget -q "${mirror}/dists/${1}/Release" -O - | grep -E '^[[:blank:]]*.*:.*$'
+
+}
+
+findmirror $1
