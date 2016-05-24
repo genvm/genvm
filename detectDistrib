@@ -24,4 +24,4 @@ findmirror () {
 
 }
 
-findmirror $1
+findmirror $(echo ${1} | sed 's/.*/\L&/')
