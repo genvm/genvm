@@ -40,6 +40,7 @@ _INTERACTIVE_SEQUENCE=false
 _TMPDIR="/tmp"
 _PARTBOOT=
 _DEFAULT_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+DEBOOTSTRAP_DIR="/usr/share/debootstrap/"
 APT_OPTS="--no-install-recommends"
 BOOTSTRAP_OPTS="--variant=minbase"
 SECURE_TMOUT=1
@@ -392,7 +393,8 @@ init_env () {
 	: ${_ARCH:=${CMD_ARCH:=${ARCH}}}
 	echo "architecture : ${_ARCH}"
 	: ${_VERSION:=${CMD_VERSION:=${VERSION}}}
-	echo "install debian ${_VERSION}"
+	detect_distrib
+	echo "install ${DISTRIB:=debian} ${_VERSION}"
 	[[ ! -z "${CMD_LISTPKG}" ]] && {
 		[[ -r ${CMD_LISTPKG} ]] && {
 			__content=$(sed '{s/[[:blank:]]//g;s/#.*$//g;s,//.*,,g;/^$/d;s/-$//}' ${CMD_LISTPKG} | sed ':a;N;$!ba;s/\n/ /g')
@@ -794,6 +796,13 @@ interactive_seq () {
 		/bin/bash --noprofile --norc )
 	echo -ne "\n\n*** END OF INTERACTIVE SEQUENCE ***\n\n"
 	init_out
+}
+
+detect_distrib () {
+ [[ -e "${DEBOOTSTRAP_DIR}/scripts/${_VERSION}" ]] || \
+  die "ERR (${FUNCNAME:-Unknown}) > No script to generate \"${_VERSION}\" install!"
+ grep -E '^[^#].*ubuntu.*' "${DEBOOTSTRAP_DIR}/scripts/${_VERSION}" > /dev/null 2>&1 && \
+  DISTRIB=ubuntu
 }
 
 step_by_step () {
