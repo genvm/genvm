@@ -1,18 +1,18 @@
 ![GenVM](http://www.genvm.eu/img/logo.png "GenVM")
 
-GenVM Is a poerfull script designed to generate minimum and complete 
-Debian and Ubuntu virtual machines for KVM/QEMU (so usable in ProxMox, 
+GenVM Is a powerful script designed to generate minimum and complete 
+Debian or Ubuntu virtual machines for KVM/QEMU (so usable in ProxMox, 
 libvirtd, ...), VirtualBox and VMWare.
 
-GenVM is distributed under GPL3.
+GenVM is distributed under the GPL3.
 
-Sources are avalable from GitHub (http://github.com/genvm) and 
+Sources are available from GitHub (http://github.com/genvm) and 
 documentation is available on http://www.genvm.eu.
 
 # Tested distributions
 
-GenVM was tested on Debian Wheezy, Jessie and Stretch, Ubuntu Trusty and
-Arch Linux.
+GenVM was tested on Debian Wheezy, Jessie, Stretch, Ubuntu Trusty, Vivid, 
+Wily and Arch Linux.
 
 # Generated VM
 
@@ -38,10 +38,10 @@ Arch Linux.
 
 # Installation
 
-No special installation needed, only download the last version of GenVM,
+No special installation needed, only download the latest version of GenVM,
 adjust permissions and launch it via sudo or su.
 
-## from sources
+## From sources
 
     $ git clone https://github.com/genvm/genvm.git
     Cloning into 'genvm'...
@@ -55,7 +55,7 @@ adjust permissions and launch it via sudo or su.
     $ ls
     genvm
 
-## from archive
+## From archive
 
 ### Last version (dev)
 
@@ -68,10 +68,10 @@ adjust permissions and launch it via sudo or su.
 
 ### Stable version
 
-You can find stables version from GitHub on page :
-https://github.com/genvm/genvm/tags
+You can find stable versions from GitHub on this page :
+https://github.com/genvm/genvm/releases
 
-Download the last version and extract it like last version.
+Download the latest version and extract it.
 
 # Examples
 
@@ -90,7 +90,7 @@ Consult http://www.genvm.eu for all documentations.
 
 ## Simple Ubuntu
 
-    $ su -c "genvm -b grub-pc -k linux-image-generic \
+    $ su -c "./genvm -b grub-pc -k linux-image-generic \
      -n trusty \
      -S http://archive.ubuntu.com/ubuntu/ \
      -V trusty ubuntu-trusty.vmdk"
