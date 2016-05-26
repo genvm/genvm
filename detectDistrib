@@ -1,12 +1,12 @@
 #!/bin/bash
 
-ARCH=amd64
+: ${DEBOOTSTRAP_DIR=/usr/share/debootstrap/}
 mirror=http://ftp.fr.debian.org/debian
-debootstrap_scripts=/usr/share/debootstrap/scripts/
+debootstrap_scripts="${DEBOOTSTRAP_DIR}/scripts/"
 
 findmirror () {
  [[ -e "${debootstrap_scripts}/${1:?No distrib specified! Specify a distrib please.}" ]] || {
-  echo "${1} not found!"
+  echo "Err> Variant "${1}" not found!"
   exit 1
  }
  default_mirror () { mirror=${1:-debian} ; }
