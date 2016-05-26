@@ -9,8 +9,8 @@ findmirror () {
   echo "Err> Variant "${1}" not found!"
   exit 1
  }
- default_mirror () { mirror=${1:-debian} ; }
- mirror_style () { return 0 ; }
+ default_mirror () { mirror=${1:-debian} ; } # Set variable mirror from script debootstrap
+ mirror_style () { return 0 ; } # inibits debootstrap functions
  download_style () { return 0 ; }
  finddebs_style () { return 0 ; }
  variants () { return 0 ; }
@@ -19,7 +19,6 @@ findmirror () {
  error () { return 0 ; }
 
  source "${debootstrap_scripts}/${1}"
- 
 }
 
 downloadinfo () { # Download info from mirror
