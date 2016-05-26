@@ -20,8 +20,13 @@ findmirror () {
 
  source "${debootstrap_scripts}/${1}"
  
- wget -q "${mirror}/dists/${1}/Release" -O - | grep -E '^[[:blank:]]*.*:.*$'
-
 }
 
+downloadinfo () { # Download info from mirror
+ wget -q "${mirror}/dists/${1}/Release" -O - | grep -E '^[[:blank:]]*.*:.*$'
+}
+
+
 findmirror $(echo ${1} | sed 's/.*/\L&/')
+downloadinfo $(echo ${1} | sed 's/.*/\L&/')
+
