@@ -6,7 +6,7 @@ debootstrap_scripts="${DEBOOTSTRAP_DIR}/scripts/"
 
 findmirror () {
  [[ -e "${debootstrap_scripts}/${1:?No distrib specified! Specify a distrib please.}" ]] || {
-  echo "Err> Variant "${1}" not found!"
+  echo "Err> Variant "${1}" not found!" >&2
   exit 1
  }
  default_mirror () { mirror=${1:-debian} ; } # Set variable mirror from script debootstrap
@@ -26,10 +26,13 @@ findmirror () {
 }
 
 downloadinfo () { # Download info from mirror
- wget -q "${mirror}/dists/${1}/Release" -O - | grep -E '^[[:blank:]]*.*:.*$'
+ wget -qO - "${mirror}/dists/${1}/Releasei" || {
+  echo "Err> Echec in downloading data from \"${mirror}/dists/${1}/Release\"! (wget err $?)" >&2
+  exit 1 
+ }
 }
 
 
 findmirror $(echo ${1} | sed 's/.*/\L&/')
-downloadinfo $(echo ${1} | sed 's/.*/\L&/') | while IFS=: read a b ; do [[ -n $b ]] && echo "$a => $b" ; done
+downloadinfo $(echo ${1} | sed 's/.*/\L&/') | grep -E '^[[:blank:]]*.*:.*$' | while IFS=: read a b ; do [[ -n $b ]] && echo "$a => $b" ; done
 
