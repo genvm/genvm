@@ -3,7 +3,7 @@
 : ${DEBOOTSTRAP_DIR=/usr/share/debootstrap/}
 mirror=http://ftp.fr.debian.org/debian
 debootstrap_scripts="${DEBOOTSTRAP_DIR}/scripts/"
-
+declare -A data
 
 findmirror () {
  [[ -e "${debootstrap_scripts}/${1:?No distrib specified! Specify a distrib please.}" ]] || {
@@ -33,8 +33,15 @@ downloadinfo () { # Download info from mirror
  }
 }
 
-
+data2array () {
+ while IFS=: read a b ; do
+  [[ -n $b ]] && data["$a"]="$b"
+ done <<< "$(downloadinfo $(echo ${1} | sed 's/.*/\L&/') | grep -E '^[[:blank:]]*.*:.*$')"
+}
 
 findmirror $(echo ${1} | sed 's/.*/\L&/')
-downloadinfo $(echo ${1} | sed 's/.*/\L&/') | grep -E '^[[:blank:]]*.*:.*$' | while IFS=: read a b ; do [[ -n $b ]] && echo "$a => $b" ; done
+data2array $(echo ${1} | sed 's/.*/\L&/')
 
+for elem in ${!data[*]} ; do
+	echo "Key \"${elem}\" : Value : "${data[${elem}]}
+done
