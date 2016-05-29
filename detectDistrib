@@ -31,5 +31,5 @@ downloadinfo () { # Download info from mirror
 
 
 findmirror $(echo ${1} | sed 's/.*/\L&/')
-downloadinfo $(echo ${1} | sed 's/.*/\L&/')
+downloadinfo $(echo ${1} | sed 's/.*/\L&/') | while IFS=: read a b ; do [[ -n $b ]] && echo "$a => $b" ; done
 
