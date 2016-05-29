@@ -40,7 +40,6 @@ _INTERACTIVE_SEQUENCE=false
 _TMPDIR="/tmp"
 _PARTBOOT=
 _DEFAULT_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-DEBOOTSTRAP_DIR="/usr/share/debootstrap/"
 APT_OPTS="--no-install-recommends"
 BOOTSTRAP_OPTS="--variant=minbase"
 SECURE_TMOUT=1
@@ -52,6 +51,7 @@ SIZE="5G"
 FORMAT="vmdk"
 MINIMAL_SIZE=500M
 ERROR_MINIMAL_SIZE=1M
+: ${DEBOOTSTRAP_DIR="/usr/share/debootstrap/"}
 
 declare -a STEPS PARTSTABLE ORDER_TABLE MONTEDPARTS THIRD_ARRAY
 
