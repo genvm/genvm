@@ -52,6 +52,7 @@ FORMAT="vmdk"
 MINIMAL_SIZE=500M
 ERROR_MINIMAL_SIZE=1M
 : ${DEBOOTSTRAP_DIR="/usr/share/debootstrap/"}
+DEFAULT_MIRROR="http://ftp.debian.org/debian"
 
 declare -a STEPS PARTSTABLE ORDER_TABLE MONTEDPARTS THIRD_ARRAY
 
@@ -393,16 +394,16 @@ init_env () {
 	: ${_ARCH:=${CMD_ARCH:=${ARCH}}}
 	echo "architecture : ${_ARCH}"
 	: ${_VERSION:=${CMD_VERSION:=${VERSION}}}
-	detect_distrib
-	echo "install ${DISTRIB:=debian} ${_VERSION}"
 	[[ ! -z "${CMD_LISTPKG}" ]] && {
 		[[ -r ${CMD_LISTPKG} ]] && {
 			__content=$(sed '{s/[[:blank:]]//g;s/#.*$//g;s,//.*,,g;/^$/d;s/-$//}' ${CMD_LISTPKG} | sed ':a;N;$!ba;s/\n/ /g')
 			CMD_ADDPKG="${CMD_ADDPKG//,/ } ${__content}"
 		} || die "ERR (${FUNCNAME:-Unknown}) > Package list \"${CMD_LISTPKG}\" not found or unreadable."
 	}
-	[[ -n "${SERVER}" ]] && \
-		echo "use server ${SERVER} to installation"
+	[[ -z "${SERVER}" ]] && \
+		set_mirror ${_VERSION}
+	echo "use server ${SERVER} to installation"
+	echo "install ${DISTRIB:=debian} ${_VERSION}"
 	case ${_ARCH} in
 		amd64)	KARCH=${_ARCH} ;;
 		i386) 	KARCH="686-pae" ;;
@@ -798,11 +799,21 @@ interactive_seq () {
 	init_out
 }
 
-detect_distrib () {
- [[ -e "${DEBOOTSTRAP_DIR}/scripts/${_VERSION}" ]] || \
-  die "ERR (${FUNCNAME:-Unknown}) > No script to generate \"${_VERSION}\" install!"
- grep -E '^[^#].*ubuntu.*' "${DEBOOTSTRAP_DIR}/scripts/${_VERSION}" > /dev/null 2>&1 && \
-  DISTRIB=ubuntu
+set_mirror () {
+	local debootstrap_scripts="${DEBOOTSTRAP_DIR}/scripts/"
+	[[ -e "${debootstrap_scripts}/${1:?No distrib specified! Specify a distrib please.}" ]] || \
+		die "ERR (${FUNCNAME:-Unknown}) > Variant \"${1}\" not found!"
+	default_mirror () { SERVER=${1:-${DEFAULT_MIRROR}} ; } # Set variable mirror from script debootstrap
+	mirror_style () { return 0 ; } # inibits debootstrap functions
+	download_style () { return 0 ; }
+	finddebs_style () { return 0 ; }
+	variants () { return 0 ; }
+	keyring () { return 0 ; }
+	doing_variant () { return 0 ; }
+	error () { return 0 ; }
+	source "${debootstrap_scripts}/${1}"
+	unset default_mirror mirror_style download_style variants \
+		finddebs_style keyring doing_variant error
 }
 
 step_by_step () {
