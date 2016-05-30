@@ -832,10 +832,11 @@ display_version_data () {
 }
 
 adapt_data () {
-	case ${} in
-		ubuntu)
+	case ${VERSION_DATA["origin"]:=debian} in
+		Ubuntu)
 			_KERNEL=linux-image-generic
-			_BOOTLOADER=grub-pc ;;
+			_BOOTLOADER=grub-pc
+			BOOTSTRAP_OPTS="--include=ubuntu-minimal" ;;
 		*)
 			case ${_ARCH} in
 				amd64)	KARCH=${_ARCH} ;;
