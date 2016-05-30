@@ -403,9 +403,9 @@ init_env () {
 	}
 	[[ -z "${SERVER}" ]] && \
 		set_mirror ${_VERSION}
-	echo "use server ${SERVER} to installation"
+	echo "using server ${SERVER}"
 	load_version_data
-	echo "install ${VERSION_DATA["origin"]:=debian} ${_VERSION}"
+	display_version_data
 	case ${_ARCH} in
 		amd64)	KARCH=${_ARCH} ;;
 		i386) 	KARCH="686-pae" ;;
@@ -828,6 +828,15 @@ load_version_data () {
 		[[ -n "${value}" ]] && \
 			VERSION_DATA["${key,,}"]="$(echo ${value} | sed 's/^[[:blank:]]*\(.*\)[[:blank:]]*$/\1/')"
 	done <<< "$(download_info ${_VERSION,,} | grep -E '^[[:blank:]]*.*:.*$')"
+}
+
+display_version_data () {
+	[[ -n ${VERSION_DATA["description"]} ]] && \
+		echo "installing "${VERSION_DATA["description"]}
+	[[ -n ${VERSION_DATA["date"]} ]] && \
+		echo "released on "${VERSION_DATA["date"]}
+	[[ -n ${VERSION_DATA["components"]} ]] && \
+		echo "components available on this server: "${VERSION_DATA["components"]}
 }
 
 step_by_step () {
