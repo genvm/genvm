@@ -55,6 +55,7 @@ ERROR_MINIMAL_SIZE=1M
 DEFAULT_MIRROR="http://ftp.debian.org/debian"
 
 declare -a STEPS PARTSTABLE ORDER_TABLE MONTEDPARTS THIRD_ARRAY
+declare -A VERSION_DATA
 
 REGEXP_SWAP='^sw(ap)?$'
 REGEXP_APPROXIMATIVE_SWAP='.*sw(ap)?.*'
@@ -393,7 +394,7 @@ init_env () {
 	echo "size of vm : ${_SIZE}"
 	: ${_ARCH:=${CMD_ARCH:=${ARCH}}}
 	echo "architecture : ${_ARCH}"
-	: ${_VERSION:=${CMD_VERSION:=${VERSION}}}
+	: ${_VERSION:=${CMD_VERSION:=${VERSION,,}}}
 	[[ ! -z "${CMD_LISTPKG}" ]] && {
 		[[ -r ${CMD_LISTPKG} ]] && {
 			__content=$(sed '{s/[[:blank:]]//g;s/#.*$//g;s,//.*,,g;/^$/d;s/-$//}' ${CMD_LISTPKG} | sed ':a;N;$!ba;s/\n/ /g')
@@ -403,7 +404,8 @@ init_env () {
 	[[ -z "${SERVER}" ]] && \
 		set_mirror ${_VERSION}
 	echo "use server ${SERVER} to installation"
-	echo "install ${DISTRIB:=debian} ${_VERSION}"
+	load_version_data
+	echo "install ${VERSION_DATA["origin"]:=debian} ${_VERSION}"
 	case ${_ARCH} in
 		amd64)	KARCH=${_ARCH} ;;
 		i386) 	KARCH="686-pae" ;;
@@ -817,8 +819,15 @@ set_mirror () {
 }
 
 download_info () { # Download info from mirror
-	wget -qO - "${SERVER:=${DEFAULT_MIRROR}}/dists/$(echo ${1:?No distrib specified! Specify a distrib please.} | sed 's/.*/\L&/')/Release" || \
+	wget -qO - "${SERVER:=${DEFAULT_MIRROR}}/dists/${1:?No distrib specified! Specify a distrib please.}/Release" || \
 		die "ERR (${FUNCNAME:-Unknown}) > Downloading data failed on \"${SERVER}/dists/${1}/Release\"! (wget err $?)"
+}
+
+load_version_data () {
+	while IFS=: read key value ; do
+		[[ -n "${value}" ]] && \
+			VERSION_DATA["${key,,}"]="$(echo ${value} | sed 's/^[[:blank:]]*\(.*\)[[:blank:]]*$/\1/')"
+	done <<< "$(download_info ${_VERSION,,} | grep -E '^[[:blank:]]*.*:.*$')"
 }
 
 step_by_step () {
@@ -912,7 +921,7 @@ while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
 		v)
 			_VERBOSE=true ;;
 		V)
-			CMD_VERSION=${OPTARG} ;;
+			CMD_VERSION=${OPTARG,,} ;;
 		:)
 			echo -e "> Option -$OPTARG requiert un argument.\n" >&2
 			usage ;;
