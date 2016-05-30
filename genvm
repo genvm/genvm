@@ -406,15 +406,7 @@ init_env () {
 	echo "using server ${SERVER}"
 	load_version_data
 	display_version_data
-	case ${_ARCH} in
-		amd64)	KARCH=${_ARCH} ;;
-		i386) 	KARCH="686-pae" ;;
-		*)	die "ERR (${FUNCNAME:-Unknown}) > Architecture unknown." ;;
-	esac
-	: ${_KERNEL:=${CMD_KERNEL:=${KERNEL}${KARCH}}}
-	echo "install kernel : ${_KERNEL}"
-	: ${_BOOTLOADER:=${CMD_BOOTLOADER:=${BOOTLOADER}}}
-	echo "boot loader : ${_BOOTLOADER}"
+	adapt_data
 	: ${_ROOTPWD:="${CMD_ROOTPWD:="${ROOTPWD:=""}"}"}
 	[[ ${#_PARTITIONS} -le 0 ]] && {
 		_PARTITIONS[${#_PARTITIONS}]="/"
@@ -837,6 +829,24 @@ display_version_data () {
 		echo "released on "${VERSION_DATA["date"]}
 	[[ -n ${VERSION_DATA["components"]} ]] && \
 		echo "components available on this server: "${VERSION_DATA["components"]}
+}
+
+adapt_data () {
+	case ${} in
+		ubuntu)
+			_KERNEL=linux-image-generic
+			_BOOTLOADER=grub-pc ;;
+		*)
+			case ${_ARCH} in
+				amd64)	KARCH=${_ARCH} ;;
+				i386) 	KARCH="686-pae" ;;
+				*)	die "ERR (${FUNCNAME:-Unknown}) > Architecture unknown." ;;
+			esac
+			: ${_KERNEL:=${CMD_KERNEL:=${KERNEL}${KARCH}}}
+			: ${_BOOTLOADER:=${CMD_BOOTLOADER:=${BOOTLOADER}}} ;;
+	esac
+	echo "install kernel : ${_KERNEL}"
+	echo "boot loader : ${_BOOTLOADER}"
 }
 
 step_by_step () {
