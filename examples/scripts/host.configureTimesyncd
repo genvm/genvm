@@ -1,0 +1,17 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Configure timesyncd
+
+source "${THIRD}/config.txt"
+
+chroot "${MOUNT_POINT}" /bin/bash <<eof
+ export PATH="${_DEFAULT_PATH}"
+ source /etc/profile
+ timedatectl set-timezone Europe/Paris
+ timedatectl set-ntp true
+ systemctl enable systemd-timesyncd
+eof
+
+sed -i 's/^\([:blank:]*Servers.*\)$/# \1/g' "${MOUNT_POINT}/etc/systemd/timesyncd.conf"
+
+echo "Servers=${ntpsrv}" >> "${MOUNT_POINT}/etc/systemd/timesyncd.conf"
+
