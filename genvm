@@ -816,6 +816,11 @@ set_mirror () {
 		finddebs_style keyring doing_variant error
 }
 
+download_info () { # Download info from mirror
+	wget -qO - "${SERVER:=${DEFAULT_MIRROR}}/dists/$(echo ${1:?No distrib specified! Specify a distrib please.} | sed 's/.*/\L&/')/Release" || \
+		die "ERR (${FUNCNAME:-Unknown}) > Downloading data failed on \"${SERVER}/dists/${1}/Release\"! (wget err $?)"
+}
+
 step_by_step () {
  	${_THIRD_ONLY} || create_vm_hd
 	hd2nbd
