@@ -835,7 +835,7 @@ adapt_data () {
 	case $(echo ${VERSION_DATA["origin"]:=debian} | sed 's/.*/\L&/' ) in
 		ubuntu)
 			: ${_KERNEL:=${CMD_KERNEL:=linux-image-generic}}
-			: ${_BOOTLOADER:=${CMD_BOOTLOADER:=grub-pc}} ;;
+			: ${_BOOTLOADER:=${CMD_BOOTLOADER:=grub-pc}}
 			BOOTSTRAP_OPTS="--include=ubuntu-minimal" ;;
 		*)
 			case ${_ARCH} in
