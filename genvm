@@ -832,8 +832,8 @@ display_version_data () {
 }
 
 adapt_data () {
-	case ${VERSION_DATA["origin"]:=debian} in
-		Ubuntu)
+	case $(echo ${VERSION_DATA["origin"]:=debian} | sed 's/.*/\L&/' ) in
+		ubuntu)
 			_KERNEL=linux-image-generic
 			_BOOTLOADER=grub-pc
 			BOOTSTRAP_OPTS="--include=ubuntu-minimal" ;;
