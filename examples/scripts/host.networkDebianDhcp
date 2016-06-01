@@ -1,7 +1,7 @@
 #!/bin/echo Please don't use this script directly, use it from GenVM
 # GenVM script: Configure the network to dhcp
 
-[[ "${_VERSION}" == "stretch" ]] && iface=ens3
+[[ "${_VERSION}" == "jessie" ]] || iface=ens3
 
 cat > "${MOUNT_POINT}"/etc/systemd/network/${iface:=eth0}.network <<[*_EOF_*]
 [Match]
