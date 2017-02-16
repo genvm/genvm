@@ -25,8 +25,9 @@
 
 trap end_of_script SIGINT SIGTERM SIGQUIT
 
+: "${DEBOOTSTRAP:-debootstrap}"
 NEEDED_COMMANDS="qemu-img qemu-nbd parted sync kpartx losetup mktemp mount source \
-debootstrap cat chroot umount modprobe cat source mkswap basename readlink dirname \
+$DEBOOTSTRAP cat chroot umount modprobe cat source mkswap basename readlink dirname \
 blkid tee"
 
 _SCRIPT_NAME=$(basename $0)
@@ -614,8 +615,8 @@ umountfs () {
 }
 
 install_sys () {
-	echo "debootstrap --arch=${_ARCH} ${BOOTSTRAP_OPTS} ${_VERSION} ${_MOUNT_POINT} ${SERVER}"
-	debootstrap --arch=${_ARCH} ${BOOTSTRAP_OPTS} "${_VERSION}" "${_MOUNT_POINT}" "${SERVER}" || {
+	echo "$DEBOOTSTRAP --arch=${_ARCH} ${BOOTSTRAP_OPTS} ${_VERSION} ${_MOUNT_POINT} ${SERVER}"
+	"$DEBOOTSTRAP" --arch=${_ARCH} ${BOOTSTRAP_OPTS} "${_VERSION}" "${_MOUNT_POINT}" "${SERVER}" || {
 		die "ERR (${FUNCNAME:-Unknown}) > installation failed. Exit."
 	}
 }
