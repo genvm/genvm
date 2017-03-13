@@ -11,7 +11,7 @@ chroot "${MOUNT_POINT}" /bin/bash <<eof
  systemctl enable systemd-timesyncd
 eof
 
-sed -i 's/^\([:blank:]*Servers.*\)$/# \1/g' "${MOUNT_POINT}/etc/systemd/timesyncd.conf"
+sed -i 's/^\([[:blank:]]*Servers.*\)$/# \1/g' "${MOUNT_POINT}/etc/systemd/timesyncd.conf"
 
 echo "Servers=${ntpsrv}" >> "${MOUNT_POINT}/etc/systemd/timesyncd.conf"
 
