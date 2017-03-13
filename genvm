@@ -25,7 +25,7 @@
 
 trap end_of_script SIGINT SIGTERM SIGQUIT
 
-: "${DEBOOTSTRAP:-debootstrap}"
+: "${DEBOOTSTRAP:=debootstrap}"
 NEEDED_COMMANDS="qemu-img qemu-nbd parted sync kpartx losetup mktemp mount source \
 $DEBOOTSTRAP cat chroot umount modprobe cat source mkswap basename readlink dirname \
 blkid tee"
