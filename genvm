@@ -772,10 +772,10 @@ execute_post_install () {
 		[ -d "${THIRD}" ] && {
 			for _file in $(find "${THIRD}" \( -type f -o -type l \) \
 				-a -regex "${THIRD}/[0-9]+.*" | sort) ; do
-				echo ${_file} | grep -P "[0-9]{2}\.post.*" && {
+				if echo ${_file} | grep -P "[0-9]{2}\.post.*"; then
 					echo "Running ${_file} after all"
 					source ${_file}
-				}
+				fi
 			done
 		}
 	done
