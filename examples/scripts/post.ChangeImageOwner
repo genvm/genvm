@@ -4,4 +4,4 @@
 source "${THIRD}/config.txt"
 
 chown ${user}.${group} "${HD_IMG}"
-
+[ -e "${HD_IMG%.*}.tar.gz" ] && chown ${user}.${group} "${HD_IMG%.*}.tar.gz"

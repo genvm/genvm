@@ -89,6 +89,7 @@ Options
 	-T	: run third party only
 	-v	: verbose mode
 	-V	: debian version : stretch, jessie, wheezy, ... (default : ${VERSION})
+	-z	: generate an archive of the system (a tar.gz of the system)
 
 There is 2 posibilities to run third party scripts :
  - create a single file containing script to run ;
@@ -670,6 +671,13 @@ umount_fs_proc () {
 	echo "${FUNCNAME:-Unknown}: proc unmounted"
 }
 
+make_archive () {
+	echo "${FUNCNAME:-Unknown}: make achive of system"
+	tar --exclude='lost+found' -C "${_MOUNT_POINT}" -czpvf "${HD_IMG%.*}.tar.gz" ./
+	unset steps[${#steps[@]}-1]
+	echo "${FUNCNAME:-Unknown}: system archived"
+}
+
 install_grub () {
 	echo "chroot ${_MOUNT_POINT} /usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules='ext2 part_msdos' ${_NBD}"
 	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
@@ -807,6 +815,7 @@ step_by_step () {
 	mountfs
 	${_THIRD_ONLY} || install_sys
 	${_THIRD_ONLY} || generatefstab
+    ${MAKE_ARCHIVE:=false} && STEPS[${#STEPS[@]}]="make_archive"
 	mount_fs_dev
 	mount_fs_proc
 	${_THIRD_ONLY} || install_pkgs
@@ -830,7 +839,7 @@ step_by_step () {
 
 # main part
 # Partitionnement in developpement option -P
-while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
+while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:z" opt ; do
 	case ${opt} in
 		h)
 			usage 0 ;;
@@ -889,6 +898,8 @@ while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:" opt ; do
 			_VERBOSE=true ;;
 		V)
 			CMD_VERSION=${OPTARG} ;;
+		z)
+			MAKE_ARCHIVE=true ;;
 		:)
 			echo -e "> Option -$OPTARG requiert un argument.\n" >&2
 			usage ;;
