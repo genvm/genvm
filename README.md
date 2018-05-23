@@ -24,6 +24,7 @@ Wily and Arch Linux.
 | debian   | jessie  |  8.X   | amd64 |
 | debian   | stretch |  9.X   | i386  |
 | debian   | stretch |  9.X   | amd64 |
+| debian   | buster  |  10.X  | amd64 |
 | ubuntu   | precise |  12.04 | i386  |
 | ubuntu   | precise |  12.04 | amd64 |
 | ubuntu   | trusty  |  14.04 | i386  |
@@ -34,6 +35,7 @@ Wily and Arch Linux.
 | ubuntu   | wily    |  15.10 | amd64 |
 | ubuntu   | xenial  |  16.04 | i386  |
 | ubuntu   | xenial  |  16.04 | amd64 |
+| ubuntu   | bionic  |  18.04 | amd64 |
 
 
 # Installation
