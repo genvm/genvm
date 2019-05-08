@@ -26,7 +26,7 @@
 trap end_of_script SIGINT SIGTERM SIGQUIT
 
 : "${DEBOOTSTRAP:=debootstrap}"
-NEEDED_COMMANDS="qemu-img qemu-nbd parted sync kpartx losetup mktemp mount source \
+NEEDED_COMMANDS="qemu-img qemu-nbd parted sync losetup mktemp mount source \
 $DEBOOTSTRAP cat chroot umount modprobe cat source mkswap basename readlink dirname \
 blkid tee"
 
@@ -52,6 +52,7 @@ SIZE="5G"
 FORMAT="vmdk"
 MINIMAL_SIZE=500M
 ERROR_MINIMAL_SIZE=1M
+OVERWRITE=false
 
 declare -a STEPS PARTSTABLE ORDER_TABLE MONTEDPARTS THIRD_ARRAY
 
@@ -75,6 +76,7 @@ Options
 	-c	: specify a config file (default: ${_CONFIG_FILE[*]})
 	-D	: debug mode
 	-f	: format of image : raw, qcow2, qcow, vmdk (default : ${FORMAT})
+	-F	: force overwrite
 	-h	: this message
 	-i	: run interactive shell before exiting
 	-k	: specify kernel version (default : ${KERNEL}${ARCH})
@@ -442,6 +444,8 @@ secure_tmout () {
 }
 
 create_vm_hd () {
+ ! ${OVERWRITE:=false} && [ -e "${HD_IMG}" ] && \
+  die "ERR (${FUNCNAME:-Unknown}) > ${HD_IMG} exist, use \"-F\" to overwite."
 	echo "create vm hard drive ${HD_IMG} (format ${_FORMAT})"
 	qemu-img create -f ${_FORMAT} "${HD_IMG}" ${_SIZE} || \
 		die "ERR (${FUNCNAME:-Unknown}) > making ${HD_IMG} failed. Execution failed"
@@ -513,54 +517,54 @@ partitiondrive () {
 }
 
 generatefstab () {
-	echo "${FUNCNAME:-Unknown}: generate fstab"
-	local _basedevice=/dev/sda
-	local _fstab=/etc/fstab
-	echo "# <file system>	<dir>	<type>	<options>	<dump>	<pass>" | tee "${_MOUNT_POINT}${_fstab}"
-	for entry in ${ORDER_TABLE[@]} ; do
-		IFS=':' read -ra line <<<"${entry}"
-		[[ ${line[1]} -eq 4 ]] && echo -e "# ${_basedevice}${line[1]} : Extended" | tee -a "${_MOUNT_POINT}${_fstab}"
-		${_LOGIC:=false} && [[ ${line[1]} -ge 4 ]] && \
-			(( line[1] = line[1] + 1 ))
-		echo "# ${_basedevice}${line[1]}" | tee -a "${_MOUNT_POINT}${_fstab}"
-		echo -ne "$(blkid -s UUID /dev/mapper/$(basename ${_NBD})p${line[1]} | sed 's/.*\(UUID=\"[^"]*\"\).*/\1/g')\t" | tee -a "${_MOUNT_POINT}${_fstab}"
-		echo -e "${line[2]// /\\ }\t${line[4]}\t${line[5]}\t${line[6]}\t${line[7]}" | tee -a "${_MOUNT_POINT}${_fstab}"
-	done
-	echo "${FUNCNAME:-Unknown}: fstab has been generated"
+ echo "${FUNCNAME:-Unknown}: generate fstab"
+ local _basedevice=/dev/sda
+ local _fstab=/etc/fstab
+ echo "# <file system> <dir> <type> <options> <dump> <pass>" | tee "${_MOUNT_POINT}${_fstab}"
+ for entry in ${ORDER_TABLE[@]} ; do
+  IFS=':' read -ra line <<<"${entry}"
+  [[ ${line[1]} -eq 4 ]] && echo -e "# ${_basedevice}${line[1]} : Extended" | tee -a "${_MOUNT_POINT}${_fstab}"
+  ${_LOGIC:=false} && [[ ${line[1]} -ge 4 ]] && \
+   (( line[1] = line[1] + 1 ))
+  echo "# ${_basedevice}${line[1]}" | tee -a "${_MOUNT_POINT}${_fstab}"
+  echo -ne "$(blkid -s UUID ${_LOOP}p${line[1]} | sed 's/.*\(UUID=\"[^"]*\"\).*/\1/g')\t" | tee -a "${_MOUNT_POINT}${_fstab}"
+  echo -e "${line[2]// /\\ }\t${line[4]}\t${line[5]}\t${line[6]}\t${line[7]}" | tee -a "${_MOUNT_POINT}${_fstab}"
+ done
+ echo "${FUNCNAME:-Unknown}: fstab has been generated"
 }
 
 detect_partitions () {
-	echo "${FUNCNAME:-Unknown}: detecting partitions"
-	kpartx -av ${_NBD} || \
-		die "ERR (${FUNCNAME:-Unknown}) > partitions detection failed. Exit."
-	STEPS[${#STEPS[@]}]="free_part"
-	echo "${FUNCNAME:-Unknown}: partitions detected"
-	secure_tmout
+ echo "${FUNCNAME:-Unknown}: detecting partitions"
+ _LOOP=$(losetup --find --partscan --show ${_NBD}) || \
+  die "ERR (${FUNCNAME:-Unknown}) > partitions detection failed. Exit."
+ STEPS[${#STEPS[@]}]="free_part"
+ echo "${FUNCNAME:-Unknown}: partitions detected on ${_LOOP}"
+ ls ${_LOOP}*
+ secure_tmout
 }
 
 free_part () {
-	echo "${FUNCNAME:-Unknown}: freeing partitions schema"
-	kpartx -dv ${_NBD} || {
-		Kill "ERR (${FUNCNAME:-Unknown}) > partitions wont be free. Exit."
-	}
-	echo "${FUNCNAME:-Unknown}: cleaning partitions ok"
-	secure_tmout
+ echo "${FUNCNAME:-Unknown}: freeing partitions schema"
+ losetup -d ${_LOOP} || \
+  Kill "ERR (${FUNCNAME:-Unknown}) > partitions wont be free. Exit."
+ echo "${FUNCNAME:-Unknown}: cleaning ${_LOOP} partitions ok"
+ secure_tmout
 }
 
 create_filesystem () {
-	echo "${FUNCNAME:-Unknown}: create filesystems"
-	for _entry in ${PARTSTABLE[@]} ; do
-		IFS=':' read -ra _line <<<"${_entry}"
-		${_LOGIC} && [[ ${_line[1]} -ge 4 ]] && (( _line[1] =  _line[1] + 1 ))
-		[[ ${_line[4]} =~ ${REGEXP_SWAP} ]] && \
-			_cmd=mkswap || \
-			_cmd=mkfs.${_line[4]//[[:blank:]]/}
-		echo -e ".${_cmd} /dev/mapper/$(basename ${_NBD})p${_line[1]}"
-		${_cmd} /dev/mapper/$(basename ${_NBD})p${_line[1]} || \
-			die "ERR (${FUNCNAME:-Unknown}) > partition ${_NBD}p${_line[1]} can't be formated. Exit."
-	done
-#	This waiting time is needed ...
-	sleep 1
+ echo "${FUNCNAME:-Unknown}: create filesystems"
+ for _entry in ${PARTSTABLE[@]} ; do
+  IFS=':' read -ra _line <<<"${_entry}"
+  ${_LOGIC} && [[ ${_line[1]} -ge 4 ]] && (( _line[1] =  _line[1] + 1 ))
+  [[ ${_line[4]} =~ ${REGEXP_SWAP} ]] && \
+   _cmd=mkswap || \
+   _cmd=mkfs.${_line[4]//[[:blank:]]/}
+  echo -e ".${_cmd} ${_LOOP}p${_line[1]}"
+  ${_cmd} ${_LOOP}p${_line[1]} || \
+   die "ERR (${FUNCNAME:-Unknown}) > partition ${_LOOP}p${_line[1]} can't be formated. Exit."
+ done
+# This waiting time is needed ...
+ sleep 1
 }
 
 create_tempdir () {
@@ -583,16 +587,12 @@ mountfs () {
 			mkdir -p "${_MOUNT_POINT}/${_line[2]}" || \
 				die "ERR (${FUNCNAME:-Unknown}) > Couldn't create directory"
 		}
-		[[ ${_line[1]} -eq ${_PARTBOOT} ]] && {
-			echo "assosiate boot partition to loop device"
-			losetup ${_LOOP} /dev/mapper/$(basename ${_NBD})p${_line[1]} || \
-				die "ERR (${FUNCNAME:-Unknown}) > associate first partition to loop device failed. Exit."
-			_device=${_LOOP}
-		}
-		echo "mount ${_device:=/dev/mapper/$(basename ${_NBD})p${_line[1]}} ${_MOUNT_POINT}${_line[2]// /\\ }"
-		mount "${_device:=/dev/mapper/$(basename ${_NBD})p${_line[1]}}" "${_MOUNT_POINT}${_line[2]}" && \
-			MONTEDPARTS[${#MONTEDPARTS[*]}]="${_device:=/dev/mapper/$(basename ${_NBD})p${_line[1]}}" || \
-			die "ERR (${FUNCNAME:-Unknown}) > Failed to mount ${_device:=/dev/mapper/$(basename ${_NBD})p${_line[1]}} in \"${_MOUNT_POINT}\". Exit."
+		[[ ${_line[1]} -eq ${_PARTBOOT} ]] && \
+			_device=${_LOOP}p${_line[1]}
+		echo "mount ${_device:=${_LOOP}p${_line[1]}} ${_MOUNT_POINT}${_line[2]// /\\ }"
+		mount "${_device:=${_LOOP}p${_line[1]}}" "${_MOUNT_POINT}${_line[2]}" && \
+			MONTEDPARTS[${#MONTEDPARTS[*]}]="${_device:=${_LOOP}p${_line[1]}}" || \
+			die "ERR (${FUNCNAME:-Unknown}) > Failed to mount ${_device:=${_LOOP}p${_line[1]}} in \"${_MOUNT_POINT}\". Exit."
 		unset _device
 	done
  	echo "${FUNCNAME:-Unknown}: filesystems monted"
@@ -671,6 +671,23 @@ umount_fs_proc () {
 	echo "${FUNCNAME:-Unknown}: proc unmounted"
 }
 
+mount_fs_sys () {
+ echo "${FUNCNAME:-Unknown}: mounting sysfs"
+ mount -t sysfs sys "${_MOUNT_POINT}"/sys/ || \
+  die "ERR (${FUNCNAME:-Unknown}) > failed to mount /sys in chroot"
+ STEPS[${#STEPS[@]}]="umount_fs_sys"
+ echo "${FUNCNAME:-Unknown}: sysfs mounted"
+}
+
+umount_fs_sys () {
+ echo "${FUNCNAME:-Unknown}: unmounting sys"
+ umount -l "${_MOUNT_POINT}"/sys/ || {
+  unset steps[${#steps[@]}-1]
+  kill "ERR (${FUNCNAME:-Unknown}) > failed to umount /sys in chroot"
+ }
+ echo "${FUNCNAME:-Unknown}: sysfs unmounted"
+}
+
 make_archive () {
 	echo "${FUNCNAME:-Unknown}: make achive of system"
 	tar --exclude='lost+found' -C "${_MOUNT_POINT}" -czpvf "${HD_IMG%.*}.tar.gz" ./
@@ -679,11 +696,11 @@ make_archive () {
 }
 
 install_grub () {
-	echo "chroot ${_MOUNT_POINT} /usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules='ext2 part_msdos' ${_NBD}"
+	echo "chroot ${_MOUNT_POINT} /usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules='ext2 part_msdos' ${_LOOP}"
 	chroot "${_MOUNT_POINT}" /bin/bash <<__EOF__
 export PATH="${_DEFAULT_PATH}"
 source /etc/profile
-/usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules="ext2 part_msdos" ${_NBD}
+/usr/sbin/grub-install --no-floppy --boot-directory=/boot --modules="ext2 part_msdos" ${_LOOP}
 __EOF__
 	[[ $? -gt 0 ]] && \
 		die "ERR (${FUNCNAME:-Unknown}) > Installation of grub failed. Exit."
@@ -806,40 +823,41 @@ interactive_seq () {
 }
 
 step_by_step () {
- 	${_THIRD_ONLY} || create_vm_hd
-	hd2nbd
-	${_THIRD_ONLY} || partitiondrive
-	detect_partitions
-	${_THIRD_ONLY} || create_filesystem
-	create_tempdir
-	mountfs
-	${_THIRD_ONLY} || install_sys
-	${_THIRD_ONLY} || generatefstab
-    ${MAKE_ARCHIVE:=false} && STEPS[${#STEPS[@]}]="make_archive"
-	mount_fs_dev
-	mount_fs_proc
-	${_THIRD_ONLY} || install_pkgs
-	${_THIRD_ONLY} || case ${_BOOTLOADER} in
-		grub2|grub-pc)
-			install_grub ;;
-		*)
-			echo -e "\n\n*** Boot loader unknown ! Install interactively ***\n\n"
-			sleep 2
-			_INTERACTIVE_SEQUENCE=true
-			;;
-	esac
-	${_THIRD_ONLY} || set_machine_name
-	${_THIRD_ONLY} || set_passwd_to root "${_ROOTPWD}"
-	${_THIRD_ONLY} || clean_install
-	execute_third_part
-	${_INTERACTIVE_SEQUENCE} && interactive_seq
-	cleaning
-	execute_post_install
+ ${_THIRD_ONLY} || create_vm_hd
+ hd2nbd
+ ${_THIRD_ONLY} || partitiondrive
+ detect_partitions
+ ${_THIRD_ONLY} || create_filesystem
+ create_tempdir
+ mountfs
+ ${_THIRD_ONLY} || install_sys
+ ${_THIRD_ONLY} || generatefstab
+ ${MAKE_ARCHIVE:=false} && STEPS[${#STEPS[@]}]="make_archive"
+ mount_fs_dev
+ mount_fs_proc
+ mount_fs_sys
+ ${_THIRD_ONLY} || install_pkgs
+ ${_THIRD_ONLY} || case ${_BOOTLOADER} in
+  grub2|grub-pc)
+   install_grub ;;
+  *)
+   echo -e "\n\n*** Boot loader unknown ! Install interactively ***\n\n"
+   sleep 2
+   _INTERACTIVE_SEQUENCE=true
+   ;;
+ esac
+ ${_THIRD_ONLY} || set_machine_name
+ ${_THIRD_ONLY} || set_passwd_to root "${_ROOTPWD}"
+ ${_THIRD_ONLY} || clean_install
+ execute_third_part
+ ${_INTERACTIVE_SEQUENCE} && interactive_seq
+ cleaning
+ execute_post_install
 }
 
 # main part
 # Partitionnement in developpement option -P
-while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:z" opt ; do
+while getopts ":a:b:hc:vDn:f:Fk:s:S:p:V:A:t:l:Tio:P:z" opt ; do
 	case ${opt} in
 		h)
 			usage 0 ;;
@@ -859,6 +877,8 @@ while getopts ":a:b:hc:vDn:f:k:s:S:p:V:A:t:l:Tio:P:z" opt ; do
 			_DEBUG=true ;;
 		f)
 			CMD_FORMAT=${OPTARG} ;;
+		F)
+			OVERWRITE=true ;;
 		i)
 			_INTERACTIVE_SEQUENCE=true ;;
 		k)
