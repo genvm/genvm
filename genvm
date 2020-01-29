@@ -53,6 +53,7 @@ FORMAT="vmdk"
 MINIMAL_SIZE=500M
 ERROR_MINIMAL_SIZE=1M
 OVERWRITE=false
+SWAP_UUID=
 
 declare -a STEPS PARTSTABLE ORDER_TABLE MONTEDPARTS THIRD_ARRAY
 
@@ -527,8 +528,10 @@ generatefstab () {
   ${_LOGIC:=false} && [[ ${line[1]} -ge 4 ]] && \
    (( line[1] = line[1] + 1 ))
   echo "# ${_basedevice}${line[1]}" | tee -a "${_MOUNT_POINT}${_fstab}"
-  echo -ne "$(blkid -s UUID ${_LOOP}p${line[1]} | sed 's/.*\(UUID=\"[^"]*\"\).*/\1/g')\t" | tee -a "${_MOUNT_POINT}${_fstab}"
+  local _UUID=$(blkid -s UUID ${_LOOP}p${line[1]} | sed 's/.*\(UUID=\"[^"]*\"\).*/\1/g')
+  echo -ne "${_UUID}\t" | tee -a "${_MOUNT_POINT}${_fstab}"
   echo -e "${line[2]// /\\ }\t${line[4]}\t${line[5]}\t${line[6]}\t${line[7]}" | tee -a "${_MOUNT_POINT}${_fstab}"
+  [[ ${line[4]} =~ ${REGEXP_SWAP} ]] && export SWAP_UUID=${_UUID} 
  done
  echo "${FUNCNAME:-Unknown}: fstab has been generated"
 }
