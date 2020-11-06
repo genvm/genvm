@@ -7,7 +7,9 @@
 #    Description        : "genvm" Is a powerfull script bash to generate
 #   a minimal and complete Debian and Ubuntu virtual machine for KVM/QEMU
 #   (so usable in ProxMox, libvirtd, ...), VirtualBox and/or VMWare.
-#    Licence            : GPL3
+#    License            : GPL3 or later
+#    Copyright          : Copyright (C) 2013 Francis Hulin-Hubard and
+#   contributors
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
