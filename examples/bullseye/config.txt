@@ -1,0 +1,15 @@
+hostname=simple.local.lan
+uhostname=simple
+
+# Domain name:
+domain=local.lan # sysctlDomainName
+
+# NTP Servers
+ntpsrv="ntp.obspm.fr" # configureTimesyncd
+
+# User and group destination:
+user=1000 # ChangeImageOwner
+group=985 # ChangeImageOwner
+
+export hostname domain uhostname
+

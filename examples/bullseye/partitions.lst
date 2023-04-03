@@ -5,4 +5,3 @@
 sw:1G
 # third: /srv, 9G (the rest) in ext4 too
 /srv
-

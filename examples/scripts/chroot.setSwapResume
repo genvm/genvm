@@ -1,0 +1,5 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Configuration de la partition de swap
+
+[ -n "${SWAP_UUID}" ] && echo "RESUME=${SWAP_UUID}" | tee -a /etc/initramfs-tools/conf.d/resume
+

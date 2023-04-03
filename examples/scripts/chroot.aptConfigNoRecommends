@@ -3,4 +3,5 @@
 
 cat > /etc/apt/apt.conf.d/02norecommends <<[*_EOF_*]
 APT::Install-Recommends False;
+APT::Install-Suggests False;
 [*_EOF_*]

@@ -1,0 +1,5 @@
+# Add init system:
+ systemd
+# Packages for network:
+ openssh-server
+ dbus

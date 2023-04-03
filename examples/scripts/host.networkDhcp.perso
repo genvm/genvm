@@ -1,0 +1,24 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Configure the network to dhcp
+
+iface=eth0
+
+cat > "${MOUNT_POINT}"/etc/systemd/network/${iface:=eth0}.network <<[*_EOF_*]
+[Match]
+Name=${iface}
+
+[Network]
+DHCP=yes
+
+[*_EOF_*]
+
+chroot "${MOUNT_POINT}" /bin/bash <<_eof_
+ export PATH="${_DEFAULT_PATH}"
+ source /etc/profile
+
+ systemctl enable systemd-networkd
+
+ rm /etc/resolv.conf
+ systemctl enable systemd-resolved
+ ln -s /run/systemd/resolve/resolv.conf /etc/resolv.conf
+_eof_

@@ -1,0 +1,11 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+
+grub_config=/etc/default/grub
+
+grep ^[[:blank:]]*GRUB_CMDLINE_LINUX_DEFAULT=\".*net.ifnames=.*$ ${grub_config} >/dev/null && {
+ sed -i -e 's/\(GRUB_CMDLINE_LINUX_DEFAULT=".*net.ifnames=\).\(.*\)/\10\2/g' ${grub_config}
+} || {
+ sed -i -e 's/\(GRUB_CMDLINE_LINUX_DEFAULT="\)\(.*\)/\1net.ifnames=0 \2/g' ${grub_config}
+}
+
+grub-mkconfig | grep -v ^[[:blank:]]loopback.* | grep -v "^[[:blank:]]set\ root=.*" > /boot/grub/grub.cfg

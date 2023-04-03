@@ -1,8 +1,0 @@
-# Packages for network:
- openssh-server
-# Text editor:
- vim-tiny
-# Other packages:
- locales
-# For systemd
- dbus

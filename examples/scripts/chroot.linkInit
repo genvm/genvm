@@ -1,0 +1,5 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Create link init if needed
+
+[ -e /bin/init -o -e /sbin/init -o -e /usr/bin/init -o -e /usr/sbin/init ]  || ln -s /bin/systemd /sbin/init 
+
