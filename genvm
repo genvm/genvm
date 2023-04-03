@@ -540,6 +540,7 @@ detect_partitions () {
  echo "${FUNCNAME:-Unknown}: detecting partitions"
  _LOOP=$(losetup --find --partscan --show ${_NBD}) || \
   die "ERR (${FUNCNAME:-Unknown}) > partitions detection failed. Exit."
+ partprobe ${_LOOP}
  STEPS[${#STEPS[@]}]="free_part"
  echo "${FUNCNAME:-Unknown}: partitions detected on ${_LOOP}"
  ls ${_LOOP}*
