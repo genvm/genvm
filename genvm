@@ -41,7 +41,7 @@ _INTERACTIVE_SEQUENCE=false
 _TMPDIR="/tmp"
 _PARTBOOT=
 _DEFAULT_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-APT_OPTS="--no-install-recommends"
+APT_OPTS="--no-install-recommends --no-install-suggests"
 BOOTSTRAP_OPTS="--variant=minbase"
 SECURE_TMOUT=1
 ARCH="amd64"
