@@ -1,0 +1,20 @@
+#!/bin/echo Please don't use this script directly, use it from GenVM
+# GenVM script: Configuration dans /etc/bash.bashrc
+
+cat >> /root/.bashrc <<[-eof-]
+
+# Personalize prompt for root :
+PS1='\[\033[0;37m\]\t \[\033[01;32m\]\[\033[01;31m\]\h\[\033[01;34m\] \W #\[\033[00m\] '
+
+# Define some aliases
+alias ls='ls --color=auto'
+alias grep='grep --color=auto'
+
+# Clear console when exit
+trap clear 0
+
+# Keep endless history
+HISTSIZE=-1
+HISTFILESIZE=-1
+
+[-eof-]
