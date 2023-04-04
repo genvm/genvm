@@ -78,6 +78,8 @@ Download the latest version and extract it.
 
 	$ docker pull genvm/genvm
 
+But, in fact, no installation needed.
+
 # Examples
 
 Note than using `-v` in examples is better to see whats happen.
