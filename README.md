@@ -68,9 +68,19 @@ Download the latest version and extract it.
 
 ## From docker
 
-Soon available.
+### Create your own image
+
+	$ git clone https://github.com/genvm/genvm.git
+	$ cd genvm
+	$ docker build -t genvm --no-cache=true .
+
+### Use official image
+
+	$ docker pull genvm/genvm
 
 # Examples
+
+Note than using `-v` in examples is better to see whats happen.
 
 ## Simple Debian
 
@@ -82,4 +92,42 @@ Soon available.
     passwd: password updated successfully
     $ ls -lh simple.debian.bullseye.vmdk
     -rw-r--r-- 1 root users 875M Jul 27 17:33 simple.debian.bullseye.vmdk
+
+## Simple Debian with docker
+
+If you are using your own image :
+
+	$ docker run -it --rm --privileged --cap-add=ALL -v ./somewhere:/srv -v /dev:/dev -v/lib/modules:/lib/modules:ro genvm
+    root@2e8c0ba4488f:/srv# genvm -l /opt/genvm/examples/bullseye/pkg.lst -t /opt/genvm/examples/bullseye debian.bullseye.vmdk
+
+Retrive generated image in `./somewhere`.
+
+If you're using official image replace `genvm` by `genvm/genvm` when you specify image name.
+
+GenVM use nbd modules, access to loopdevices and create partitions, reload it, etc. that's why it need large privileges.
+
+You can use genvm directly from docker invocation :
+
+	$ docker run -h genvm --name genvm -it --rm --privileged \
+		--cap-add=ALL -v ./data/:/srv/ -v/dev:/dev -v/lib/modules:/lib/modules:ro genvm/genvm \
+		genvm -f qcow2 \
+			-n simple \
+			-l /opt/genvm/examples/bullseye/pkg.lst \
+			-l /opt/genvm/examples/bookworm/pkg.lst \
+			-S http://ftp.lip6.fr/pub/linux/distributions/debian \
+			-p toor \
+			-t /opt/genvm/examples/bullseye \
+			-V bookworm \
+			-v \
+			-P /:4G \
+			-P sw \
+			-s 5G \
+			-F \
+			simple.bookworm.qcow2
+
+In this example, we use the fact that bookworm install is the same as bullseye but with an additionnal package (systemd-resolved), so we use evrything from `/opt/genvm/examples/bullseye` and add list of packages from `/opt/genvm/examples/bookworm/pkg.lst`. Another way to do that can be use of `-A` option (`-A systemd-resolved`) insted of creating a file and use it by `-l /opt/genvm/examples/bookworm/pkg.lst`.
+
+`-V bookworm` fix the version deployed.
+
+The partition schema is modified too (image size is 5G with a swap partition).
 
