@@ -9,7 +9,4 @@ timezone=Europe/Paris
 
 echo ${timezone} > /etc/timezone
 
-[[ -e /etc/localtime ]] && \
-	rm /etc/localtime
-
-ln -s /usr/share/zoneinfo/${timezone} /etc/localtime
+ln -sf /usr/share/zoneinfo/${timezone} /etc/localtime
