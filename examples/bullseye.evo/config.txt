@@ -1,0 +1,7 @@
+# NTP Servers
+ntpsrv="ntp.obspm.fr" # configureTimesyncd
+
+# User and group destination:
+user=1000 # ChangeImageOwner
+group=985 # ChangeImageOwner
+

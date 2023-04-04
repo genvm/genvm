@@ -133,6 +133,30 @@ In this example, we use the fact that bookworm install is the same as bullseye b
 
 The partition schema is modified too (image size is 5G with a swap partition).
 
+## Another example
+
+The example bullseye.evo propose a version with some utils configurations like timesyncd, locales, grub, disks with partitions, etc.
+
+	$ docker run -h genvm --name genvm -it --rm --privileged \
+		--cap-add=ALL -v .:/srv -v/dev:/dev -v/lib/modules:/lib/modules:ro \
+		genvm/genvm genvm -f qcow2 \
+			-n first \
+			-l examples/bullseye.evo/pkg.lst \
+			-p toor \
+			-t examples/bullseye.evo \
+			-P examples/bullseye.evo/partitions.lst \
+			-s 15G \
+			-v \
+			first.debian.bullseye.qcow2
+
+Then you can execute VM from host :
+	
+	$ qemu-system-x86_64 -m 2G -net nic -net user,hostfwd=tcp::2222-:22 first.debian.bullseye.qcow2
+
+And connect it by :
+
+	$ ssh -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -p 2222 root@localhost
+
 # Run a VM
 
 Run a VM easily with qemu 

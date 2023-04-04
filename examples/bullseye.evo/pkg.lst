@@ -1,0 +1,11 @@
+# Add init system:
+ systemd
+# Packages for network:
+ openssh-server
+ dbus
+# Add text editor
+ vim
+# Configure locales
+ locales
+# Tools to synchronize time
+ systemd-timesyncd
