@@ -133,3 +133,8 @@ In this example, we use the fact that bookworm install is the same as bullseye b
 
 The partition schema is modified too (image size is 5G with a swap partition).
 
+# Run a VM
+
+Run a VM easily with qemu 
+
+	$ qemu-system-x86_64 --enable-kvm -m 2G -net nic -net user,hostfwd=tcp::2222-:22 simple.debian.bullseye.vmdk 
