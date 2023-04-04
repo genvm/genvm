@@ -13,5 +13,5 @@ eof
 
 sed -i 's/^\([[:blank:]]*Servers.*\)$/# \1/g' "${MOUNT_POINT}/etc/systemd/timesyncd.conf"
 
-echo "Servers=${ntpsrv}" >> "${MOUNT_POINT}/etc/systemd/timesyncd.conf"
+echo "Servers=${ntpsrv:=ntp.obspm.fr}" >> "${MOUNT_POINT}/etc/systemd/timesyncd.conf"
 
