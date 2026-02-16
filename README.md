@@ -17,15 +17,9 @@ docker on all linux.
 
 | Distrib. | Name     | Rev    | Arch  |
 | -------- |:--------:|:------:|:-----:|
-| debian   | wheezy   |  7.X   | i386  |
-| debian   | wheezy   |  7.X   | amd64 |
-| debian   | jessie   |  8.X   | i386  |
-| debian   | jessie   |  8.X   | amd64 |
-| debian   | stretch  |  9.X   | i386  |
-| debian   | stretch  |  9.X   | amd64 |
-| debian   | buster   |  10.X  | amd64 |
 | debian   | Bullseye |  11.X  | amd64 |
 | debian   | Bookworm |  12.X  | amd64 |
+| debian   | Trixie   |  13.X  | amd64 |
 
 # Installation
 
