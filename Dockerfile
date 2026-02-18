@@ -8,3 +8,4 @@ RUN apt update && \
  ln -s /opt/genvm/genvm /sbin/genvm && \
  chmod 700 /opt/genvm/genvm
 
+CMD ["/sbin/genvm"]
